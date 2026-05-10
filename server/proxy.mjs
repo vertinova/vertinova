@@ -72,13 +72,15 @@ const verifyPassword = (password, storedHash) => {
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 const json = (response, statusCode, payload) => {
+  // Serialize BEFORE writeHead so if stringify throws, headers are not yet sent
+  const body = JSON.stringify(payload, (_, v) => (typeof v === 'bigint' ? Number(v) : v));
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
   });
-  response.end(JSON.stringify(payload));
+  response.end(body);
 };
 
 const parseBody = async (request) =>
@@ -487,6 +489,8 @@ createServer((request, response) => {
       json(response, 500, {
         message: error instanceof Error ? error.message : 'Terjadi kesalahan server.',
       });
+    } else if (!response.writableEnded) {
+      response.end();
     }
   });
 }).listen(port, () => {
