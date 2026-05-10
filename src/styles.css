@@ -53,43 +53,78 @@
   }
 
   .login-page {
-    @apply relative grid min-h-screen grid-cols-[minmax(0,1fr)_430px] overflow-hidden bg-[#071914] p-8 text-[#effff8] max-[860px]:grid-cols-1 max-[860px]:p-4;
+    @apply relative grid min-h-screen overflow-hidden bg-[#071914] text-[#effff8];
+    grid-template-columns: minmax(0, 1fr) 420px;
+    align-items: center;
+    padding: clamp(1rem, 3vw, 2.5rem);
+    gap: clamp(1rem, 4vw, 3rem);
+  }
+
+  @media (max-width: 860px) {
+    .login-page {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+      padding: 1.25rem;
+      gap: 1.5rem;
+    }
   }
 
   .login-bg {
-    @apply absolute inset-0 h-full w-full object-cover opacity-45;
+    @apply absolute inset-0 h-full w-full object-cover;
+    opacity: 0.7;
   }
 
   .login-page::after {
     @apply absolute inset-0 content-[''];
-    background:
-      linear-gradient(90deg, rgba(7, 25, 20, 0.94), rgba(7, 25, 20, 0.62)),
-      linear-gradient(180deg, rgba(7, 25, 20, 0.1), rgba(7, 25, 20, 0.86));
+    background: linear-gradient(
+      135deg,
+      rgba(7, 25, 20, 0.55) 0%,
+      rgba(7, 25, 20, 0.30) 50%,
+      rgba(7, 25, 20, 0.50) 100%
+    );
   }
 
   .login-copy {
-    @apply relative z-[1] grid max-w-3xl content-end p-8 max-[860px]:content-start max-[860px]:px-1 max-[860px]:py-4;
+    @apply relative grid content-end max-w-3xl;
+    z-index: 1;
+    padding: clamp(1rem, 3vw, 2rem);
+  }
+
+  @media (max-width: 860px) {
+    .login-copy {
+      @apply content-start px-1 py-3;
+    }
   }
 
   .login-copy img {
-    @apply mb-6 w-24;
+    @apply mb-4 w-16;
   }
 
   .login-copy span {
-    @apply font-extrabold uppercase text-[#b9ffdc];
+    @apply font-extrabold uppercase text-[#b9ffdc] text-xs tracking-widest;
   }
 
   .login-copy h1 {
-    @apply my-3 max-w-2xl text-[clamp(2.35rem,5vw,5rem)] leading-[.95] tracking-normal text-[#effff8] max-[860px]:text-[2.45rem];
+    @apply my-3 max-w-2xl text-[clamp(2rem,4.5vw,4.5rem)] leading-[.95] tracking-normal text-[#effff8];
   }
 
   .login-copy p {
-    @apply max-w-xl text-[1.04rem] leading-7 text-[#effff8]/75 max-[620px]:text-[.96rem];
+    @apply max-w-xl text-[1rem] leading-7 text-[#effff8]/75;
   }
 
   .login-panel {
-    @apply relative z-[1] grid self-center rounded-lg border border-white/20 bg-white/90 p-7 text-ink shadow-[0_28px_80px_rgba(0,0,0,.26)] backdrop-blur-xl max-[620px]:p-5;
+    @apply relative grid rounded-2xl border border-white/20 bg-white/95 p-7 text-ink shadow-[0_32px_80px_rgba(0,0,0,.35)] backdrop-blur-xl;
+    z-index: 1;
     gap: 18px;
+  }
+
+  @media (max-width: 620px) {
+    .login-panel {
+      @apply p-5;
+    }
+    .login-copy h1 {
+      @apply text-[2.1rem];
+    }
   }
 
   .login-panel h2 {

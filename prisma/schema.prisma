@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model RevenueSource {
+  id             String   @id @db.VarChar(32)
+  name           String   @db.VarChar(100)
+  category       Category
+  currentBalance Decimal  @default(0) @db.Decimal(18, 2) @map("current_balance")
+  status         SourceStatus @default(api_belum_terhubung)
+  color          String   @db.VarChar(16)
+  description    String   @db.VarChar(255)
+  lastSyncedAt   DateTime? @map("last_synced_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  transactions   FinanceTransaction[]
+  syncLogs       ApiSyncLog[]
+
+  @@map("revenue_sources")
+}
+
+model FinanceTransaction {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId    String   @map("source_id") @db.VarChar(32)
+  externalId  String?  @map("external_id") @db.VarChar(120)
+  direction   Direction @default(income)
+  amount      Decimal  @default(0) @db.Decimal(18, 2)
+  description String   @db.VarChar(255)
+  status      TransactionStatus @default(review)
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+  rawPayload  Json?    @map("raw_payload")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  source      RevenueSource @relation(fields: [sourceId], references: [id])
+
+  @@unique([sourceId, externalId], name: "unique_source_external_id")
+  @@index([sourceId, occurredAt], name: "index_source_occurred_at")
+  @@map("finance_transactions")
+}
+
+model ApiSyncLog {
+  id              BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  sourceId        String   @map("source_id") @db.VarChar(32)
+  status          SyncStatus
+  message         String   @db.VarChar(255)
+  responsePayload Json?    @map("response_payload")
+  syncedAt        DateTime @default(now()) @map("synced_at")
+
+  source          RevenueSource @relation(fields: [sourceId], references: [id])
+
+  @@index([sourceId, syncedAt], name: "index_source_synced_at")
+  @@map("api_sync_logs")
+}
+
+model AdminUser {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(190)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         AdminRole @default(admin)
+  isActive     Boolean  @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  sessions     UserSession[]
+
+  @@map("admin_users")
+}
+
+model UserSession {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  tokenHash String   @unique @map("token_hash") @db.Char(64)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt], name: "index_user_expires_at")
+  @@map("user_sessions")
+}
+
+enum Category {
+  api
+  manual
+}
+
+enum SourceStatus {
+  sinkron
+  api_belum_terhubung
+  manual
+}
+
+enum Direction {
+  income
+  expense
+}
+
+enum TransactionStatus {
+  terverifikasi
+  review
+  terjadwal
+}
+
+enum SyncStatus {
+  success
+  failed
+}
+
+enum AdminRole {
+  super_admin
+  admin
+}

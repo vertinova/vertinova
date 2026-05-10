@@ -793,8 +793,8 @@ function LandingPage() {
 
       {/* ── HERO ─────────────────────────────────────────────────── */}
       <section className="relative min-h-screen">
-        <img className="absolute inset-0 h-full w-full object-cover opacity-35" src={loginBackground} alt="" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,25,20,.96),rgba(7,25,20,.72)_48%,rgba(7,25,20,.36)),linear-gradient(180deg,rgba(7,25,20,.08),#071914_92%)]" />
+        <img className="absolute inset-0 h-full w-full object-cover opacity-60" src={loginBackground} alt="" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(7,25,20,.60)_0%,rgba(7,25,20,.35)_50%,rgba(7,25,20,.55)_100%)]" />
 
         <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <div className="flex items-center gap-3">
