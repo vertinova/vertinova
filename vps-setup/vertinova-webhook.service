@@ -10,6 +10,7 @@ ExecStart=/usr/bin/node /var/www/vertinova/webhook.js
 Restart=always
 RestartSec=10
 Environment=WEBHOOK_SECRET=vertinova-webhook-secret
+Environment=PORT=9876
 StandardOutput=journal
 StandardError=journal
 

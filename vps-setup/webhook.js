@@ -2,7 +2,7 @@ import http from 'http';
 import crypto from 'crypto';
 import { exec } from 'child_process';
 
-const PORT = 9000;
+const PORT = 9876;
 const SECRET = process.env.WEBHOOK_SECRET || 'vertinova-webhook-secret';
 
 function verifySignature(payload, signature) {
