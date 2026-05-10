@@ -723,13 +723,79 @@ function LandingPage() {
       icon: DatabaseZap,
     },
   ];
-  const process = ['Discovery', 'Prototype', 'Build', 'Launch', 'Scale'];
+
+  const stats = [
+    { value: '50+', label: 'Proyek Selesai' },
+    { value: '30+', label: 'Klien Aktif' },
+    { value: '99%', label: 'Uptime SLA' },
+    { value: '5 Thn', label: 'Pengalaman' },
+  ];
+
+  const projects = [
+    {
+      name: 'Forbasi Finance',
+      category: 'Dashboard & API',
+      description: 'Sistem manajemen keuangan multi-sumber dengan integrasi API real-time.',
+      color: '#23c483',
+      icon: WalletCards,
+    },
+    {
+      name: 'Desa Digital',
+      category: 'Gov-Tech',
+      description: 'Platform layanan administrasi desa: surat, laporan, dan anggaran online.',
+      color: '#3b82f6',
+      icon: Landmark,
+    },
+    {
+      name: 'Simpaskor',
+      category: 'Fintech',
+      description: 'Sinkronisasi saldo dan laporan keuangan otomatis berbasis webhook.',
+      color: '#f59e0b',
+      icon: PlugZap,
+    },
+    {
+      name: 'School OS',
+      category: 'EdTech',
+      description: 'Sistem informasi sekolah: absensi, nilai, pembayaran SPP, dan komunikasi wali.',
+      color: '#ef5da8',
+      icon: School,
+    },
+    {
+      name: 'Disnaker Portal',
+      category: 'Gov-Tech',
+      description: 'Portal perizinan ketenagakerjaan dengan alur digital dan notifikasi otomatis.',
+      color: '#8b5cf6',
+      icon: Building2,
+    },
+    {
+      name: 'Analytics Engine',
+      category: 'Data & AI',
+      description: 'Pipeline data dan AI assistant untuk laporan bisnis dan prediksi anggaran.',
+      color: '#0ea5e9',
+      icon: BrainCircuit,
+    },
+  ];
+
+  const process = [
+    { label: 'Discovery', desc: 'Memahami kebutuhan, alur kerja, dan batasan sistem.' },
+    { label: 'Prototype', desc: 'Wireframe dan desain interaktif untuk validasi awal.' },
+    { label: 'Build', desc: 'Pengembangan dengan sprint mingguan dan review rutin.' },
+    { label: 'Launch', desc: 'Deployment, testing, dan serah terima ke tim klien.' },
+    { label: 'Scale', desc: 'Monitoring, update fitur, dan pertumbuhan sistem.' },
+  ];
+
+  const scrollTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#071914] text-white">
+
+      {/* ── HERO ─────────────────────────────────────────────────── */}
       <section className="relative min-h-screen">
         <img className="absolute inset-0 h-full w-full object-cover opacity-35" src={loginBackground} alt="" />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,25,20,.96),rgba(7,25,20,.72)_48%,rgba(7,25,20,.36)),linear-gradient(180deg,rgba(7,25,20,.08),#071914_92%)]" />
+
         <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <div className="flex items-center gap-3">
             <img className="h-11 w-11 rounded-xl bg-white object-contain p-1" src={logo} alt="Vertinova" />
@@ -738,12 +804,23 @@ function LandingPage() {
               <span className="text-xs uppercase tracking-[.24em] text-emerald-100/70">Technology Partner</span>
             </div>
           </div>
-          <a
-            className="hidden rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white/80 transition hover:bg-white hover:text-[#071914] sm:inline-flex"
-            href="mailto:hello@vertinova.id"
-          >
-            Hubungi Kami
-          </a>
+          <nav className="hidden items-center gap-6 sm:flex">
+            <button onClick={() => scrollTo('capabilities')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
+              Kapabilitas
+            </button>
+            <button onClick={() => scrollTo('projects')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
+              Proyek
+            </button>
+            <button onClick={() => scrollTo('process')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
+              Cara Kerja
+            </button>
+            <a
+              className="rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white/80 transition hover:bg-white hover:text-[#071914]"
+              href="mailto:hello@vertinova.id"
+            >
+              Hubungi Kami
+            </a>
+          </nav>
         </header>
 
         <div className="relative z-10 mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl items-center gap-10 px-5 pb-14 pt-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px]">
@@ -757,27 +834,27 @@ function LandingPage() {
               <Sparkles size={16} />
               Digital product studio for ambitious teams
             </span>
-            <h1 className="mt-6 max-w-5xl text-[clamp(3.2rem,8vw,7.6rem)] font-black leading-[.88] tracking-normal text-white">
+            <h1 className="mt-6 max-w-5xl text-[clamp(3rem,8vw,7.2rem)] font-black leading-[.88] tracking-normal text-white">
               Teknologi yang membuat bisnis bergerak lebih cepat.
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/72">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/70">
               Vertinova membantu perusahaan merancang, membangun, dan menjalankan sistem digital modern:
               dari aplikasi, integrasi API, otomasi, sampai infrastruktur cloud yang stabil.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-5 font-black text-[#071914] shadow-[0_24px_60px_rgba(35,196,131,.25)] transition hover:-translate-y-0.5"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-6 font-black text-[#071914] shadow-[0_24px_60px_rgba(35,196,131,.25)] transition hover:-translate-y-0.5"
                 href="mailto:hello@vertinova.id?subject=Konsultasi%20Project%20Vertinova"
               >
                 Konsultasi Project
                 <ArrowRight size={18} />
               </a>
-              <a
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 font-bold text-white backdrop-blur transition hover:bg-white hover:text-[#071914]"
-                href="#capabilities"
+              <button
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 font-bold text-white backdrop-blur transition hover:bg-white hover:text-[#071914]"
+                onClick={() => scrollTo('capabilities')}
               >
                 Lihat Kapabilitas
-              </a>
+              </button>
             </div>
           </motion.div>
 
@@ -796,11 +873,14 @@ function LandingPage() {
             </div>
             <div className="mt-5 grid gap-3">
               {process.map((item, index) => (
-                <div className="flex items-center gap-3 rounded-xl bg-white/10 p-3" key={item}>
-                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#b9ffdc] font-black text-[#071914]">
+                <div className="flex items-center gap-3 rounded-xl bg-white/10 p-3" key={item.label}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#b9ffdc] font-black text-[#071914]">
                     {index + 1}
                   </span>
-                  <span className="font-bold text-white/90">{item}</span>
+                  <div>
+                    <p className="font-bold text-white/90 leading-tight">{item.label}</p>
+                    <p className="text-xs text-white/50 mt-0.5">{item.desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
@@ -808,12 +888,32 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* ── STATS ────────────────────────────────────────────────── */}
+      <section className="border-y border-white/10 bg-white/5 px-5 py-10 sm:px-8">
+        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 md:grid-cols-4">
+          {stats.map((stat, index) => (
+            <motion.div
+              key={stat.label}
+              className="text-center"
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.08 }}
+            >
+              <p className="text-[clamp(2.4rem,5vw,3.6rem)] font-black text-[#b9ffdc]">{stat.value}</p>
+              <p className="mt-1 text-sm text-white/60">{stat.label}</p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── CAPABILITIES ─────────────────────────────────────────── */}
       <section id="capabilities" className="bg-[#f4f7f2] px-5 py-20 text-[#10231f] sm:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
             <div>
               <p className="text-xs font-black uppercase text-[#377463]">Kapabilitas</p>
-              <h2 className="mt-2 max-w-3xl text-[clamp(2.2rem,5vw,4.8rem)] font-black leading-[.95]">
+              <h2 className="mt-2 max-w-3xl text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
                 Sistem digital yang dirancang untuk kerja nyata.
               </h2>
             </div>
@@ -822,49 +922,184 @@ function LandingPage() {
               saat bisnis bertambah besar.
             </p>
           </div>
-
           <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {capabilities.map((capability) => (
-              <article
-                className="rounded-2xl border border-[#dbe6df] bg-white p-5 shadow-[0_22px_60px_rgba(45,65,57,.09)]"
+            {capabilities.map((capability, index) => (
+              <motion.article
+                className="rounded-2xl border border-[#dbe6df] bg-white p-6 shadow-[0_22px_60px_rgba(45,65,57,.09)]"
                 key={capability.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.08 }}
               >
                 <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#e6f9ef] text-[#0e6d49]">
                   <capability.icon size={23} />
                 </div>
                 <h3 className="mt-5 text-xl font-black">{capability.title}</h3>
                 <p className="mt-3 leading-7 text-[#65766f]">{capability.description}</p>
-              </article>
+              </motion.article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="bg-white px-5 py-16 text-[#10231f] sm:px-8">
-        <div className="mx-auto grid max-w-7xl gap-6 rounded-3xl bg-[#071914] p-6 text-white md:grid-cols-[1fr_auto] md:items-center md:p-9">
-          <div>
-            <p className="text-xs font-black uppercase text-[#b9ffdc]">Siap membangun?</p>
-            <h2 className="mt-2 text-[clamp(2rem,4vw,4rem)] font-black leading-none">
-              Mari ubah proses bisnis menjadi produk digital yang solid.
+      {/* ── PROJECTS ─────────────────────────────────────────────── */}
+      <section id="projects" className="bg-white px-5 py-20 text-[#10231f] sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-10">
+            <p className="text-xs font-black uppercase text-[#377463]">Portofolio</p>
+            <h2 className="mt-2 text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
+              Proyek yang sudah berjalan.
             </h2>
           </div>
-          <a
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 font-black text-[#071914] transition hover:-translate-y-0.5"
-            href="mailto:hello@vertinova.id?subject=Konsultasi%20Teknologi%20Vertinova"
-          >
-            Mulai Diskusi
-            <Globe2 size={18} />
-          </a>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {projects.map((project, index) => (
+              <motion.article
+                key={project.name}
+                className="group relative overflow-hidden rounded-2xl border border-[#dbe6df] bg-[#f4f7f2] p-6 transition hover:shadow-[0_28px_60px_rgba(45,65,57,.14)]"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.07 }}
+              >
+                <div
+                  className="mb-4 grid h-12 w-12 place-items-center rounded-xl"
+                  style={{ backgroundColor: `${project.color}1a`, color: project.color }}
+                >
+                  <project.icon size={22} />
+                </div>
+                <span
+                  className="mb-2 inline-block rounded-full px-3 py-0.5 text-xs font-bold"
+                  style={{ backgroundColor: `${project.color}18`, color: project.color }}
+                >
+                  {project.category}
+                </span>
+                <h3 className="mt-1 text-xl font-black">{project.name}</h3>
+                <p className="mt-2 leading-7 text-[#65766f]">{project.description}</p>
+              </motion.article>
+            ))}
+          </div>
         </div>
       </section>
 
-      <footer className="bg-[#071914] px-5 py-8 text-white/60 sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 text-sm sm:flex-row">
-          <span>© {new Date().getFullYear()} Vertinova. Technology partner for modern business.</span>
-          <span className="inline-flex items-center gap-2">
-            <ServerCog size={16} />
-            vertinova.id
-          </span>
+      {/* ── PROCESS ──────────────────────────────────────────────── */}
+      <section id="process" className="bg-[#071914] px-5 py-20 sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12 text-center">
+            <p className="text-xs font-black uppercase text-emerald-400/70">Cara Kerja</p>
+            <h2 className="mt-2 text-[clamp(2rem,5vw,4rem)] font-black leading-[.95]">
+              Dari konsep ke produk yang berjalan.
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl text-white/60 leading-7">
+              Setiap proyek dimulai dari pemahaman mendalam, dibangun secara transparan, dan diserahkan dengan dokumentasi lengkap.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-5">
+            {process.map((step, index) => (
+              <motion.div
+                key={step.label}
+                className="relative rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9ffdc] font-black text-[#071914] text-lg">
+                  {index + 1}
+                </span>
+                <h3 className="mt-4 text-lg font-black">{step.label}</h3>
+                <p className="mt-2 text-sm leading-6 text-white/55">{step.desc}</p>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA ──────────────────────────────────────────────────── */}
+      <section className="bg-[#f4f7f2] px-5 py-16 text-[#10231f] sm:px-8">
+        <motion.div
+          className="mx-auto grid max-w-7xl gap-6 rounded-3xl bg-[#071914] p-8 text-white md:grid-cols-[1fr_auto] md:items-center md:p-12"
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+        >
+          <div>
+            <p className="text-xs font-black uppercase text-[#b9ffdc]">Siap membangun?</p>
+            <h2 className="mt-2 text-[clamp(2rem,4vw,3.6rem)] font-black leading-none">
+              Mari ubah proses bisnis menjadi produk digital yang solid.
+            </h2>
+            <p className="mt-4 max-w-lg text-white/60 leading-7">
+              Ceritakan kebutuhan Anda. Kami akan jawab dalam 1×24 jam dengan estimasi dan langkah konkret.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-6 font-black text-[#071914] transition hover:-translate-y-0.5"
+              href="mailto:hello@vertinova.id?subject=Konsultasi%20Teknologi%20Vertinova"
+            >
+              Kirim Email
+              <Mail size={18} />
+            </a>
+            <a
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 font-bold text-white transition hover:bg-white hover:text-[#071914]"
+              href="https://wa.me/6281234567890?text=Halo%20Vertinova%2C%20saya%20ingin%20konsultasi%20project"
+              target="_blank"
+              rel="noreferrer"
+            >
+              WhatsApp
+              <ArrowRight size={18} />
+            </a>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ── FOOTER ───────────────────────────────────────────────── */}
+      <footer className="bg-[#071914] px-5 pt-12 pb-8 sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="grid gap-10 border-b border-white/10 pb-10 md:grid-cols-[2fr_1fr_1fr]">
+            <div>
+              <div className="flex items-center gap-3">
+                <img className="h-10 w-10 rounded-xl bg-white object-contain p-1" src={logo} alt="Vertinova" />
+                <div>
+                  <strong className="block text-white">Vertinova</strong>
+                  <span className="text-xs text-white/50">Technology Partner</span>
+                </div>
+              </div>
+              <p className="mt-4 max-w-xs text-sm leading-7 text-white/50">
+                Digital product studio yang membantu bisnis tumbuh melalui teknologi yang tepat guna dan bisa diandalkan.
+              </p>
+            </div>
+            <div>
+              <p className="mb-4 text-xs font-black uppercase text-white/40">Layanan</p>
+              <ul className="grid gap-2 text-sm text-white/60">
+                <li>Software Development</li>
+                <li>Cloud & Infrastructure</li>
+                <li>API Integration</li>
+                <li>Data & AI Automation</li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-4 text-xs font-black uppercase text-white/40">Kontak</p>
+              <ul className="grid gap-2 text-sm text-white/60">
+                <li className="flex items-center gap-2">
+                  <Mail size={14} />
+                  <a href="mailto:hello@vertinova.id" className="hover:text-white transition">hello@vertinova.id</a>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Globe2 size={14} />
+                  <span>vertinova.id</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <ServerCog size={14} />
+                  <span>Jakarta, Indonesia</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div className="flex flex-col justify-between gap-4 pt-6 text-xs text-white/40 sm:flex-row">
+            <span>© {new Date().getFullYear()} Vertinova. All rights reserved.</span>
+            <span>Technology partner for modern business.</span>
+          </div>
         </div>
       </footer>
     </main>
