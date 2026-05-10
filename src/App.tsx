@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import loginBackground from '../bg-landing-page.jpg';
+import logo from '../logo-vertinova.png';
 import {
   Activity,
   ArrowDownRight,
@@ -12,12 +14,15 @@ import {
   Landmark,
   Layers3,
   LineChart,
+  LogOut,
+  Mail,
   PlugZap,
   RefreshCcw,
   School,
   Search,
   ShieldCheck,
   Sparkles,
+  UserRound,
   WalletCards,
   type LucideIcon,
 } from 'lucide-react';
@@ -67,6 +72,13 @@ type ApiSourcePayload = {
   status: RevenueSource['status'];
   lastSync?: string;
   message?: string;
+};
+
+type AdminUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: 'super_admin' | 'admin';
 };
 
 const baseSources: RevenueSource[] = [
@@ -170,14 +182,33 @@ function App() {
   const [sources, setSources] = useState(baseSources);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isBooting, setIsBooting] = useState(true);
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('vertinova_token') ?? '');
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
+
+  const authedFetch = useCallback(
+    (url: string, init?: RequestInit) =>
+      fetch(url, {
+        ...init,
+        headers: {
+          ...(init?.headers ?? {}),
+          Authorization: `Bearer ${authToken}`,
+        },
+      }),
+    [authToken],
+  );
 
   const loadFinanceData = useCallback(async () => {
     try {
       const [sourcesResponse, transactionsResponse] = await Promise.all([
-        fetch('/api/finance/sources'),
-        fetch('/api/finance/transactions'),
+        authedFetch('/api/finance/sources'),
+        authedFetch('/api/finance/transactions'),
       ]);
+
+      if (sourcesResponse.status === 401 || transactionsResponse.status === 401) {
+        throw new Error('Sesi berakhir. Silakan login ulang.');
+      }
 
       if (!sourcesResponse.ok || !transactionsResponse.ok) {
         throw new Error('API finance proxy tidak merespons dengan benar.');
@@ -216,14 +247,14 @@ function App() {
       setTransactions([]);
       setSyncMessage(error instanceof Error ? error.message : 'Gagal mengambil saldo API.');
     }
-  }, []);
+  }, [authedFetch]);
 
   const syncApiSources = useCallback(async () => {
     setIsSyncing(true);
     setSyncMessage('Mengambil saldo dari API lalu menyimpan ke database lokal...');
 
     try {
-      const response = await fetch('/api/finance/sync', { method: 'POST' });
+      const response = await authedFetch('/api/finance/sync', { method: 'POST' });
 
       if (!response.ok) {
         throw new Error('API finance proxy tidak merespons dengan benar.');
@@ -262,11 +293,65 @@ function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [authedFetch]);
 
   useEffect(() => {
-    void loadFinanceData();
-  }, [loadFinanceData]);
+    const boot = async () => {
+      if (!authToken) {
+        setIsBooting(false);
+        return;
+      }
+
+      try {
+        const response = await authedFetch('/api/auth/me');
+
+        if (!response.ok) {
+          throw new Error('Sesi tidak valid.');
+        }
+
+        const payload = (await response.json()) as { user: AdminUser };
+        setUser(payload.user);
+        await loadFinanceData();
+      } catch {
+        localStorage.removeItem('vertinova_token');
+        setAuthToken('');
+        setUser(null);
+      } finally {
+        setIsBooting(false);
+      }
+    };
+
+    void boot();
+  }, [authToken, authedFetch, loadFinanceData]);
+
+  const handleLogin = useCallback(async (email: string, password: string) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.message ?? 'Login gagal.');
+    }
+
+    localStorage.setItem('vertinova_token', payload.token);
+    setAuthToken(payload.token);
+    setUser(payload.user);
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    if (authToken) {
+      await authedFetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    }
+
+    localStorage.removeItem('vertinova_token');
+    setAuthToken('');
+    setUser(null);
+    setSources(baseSources);
+    setTransactions([]);
+  }, [authToken, authedFetch]);
 
   const totalIncome = useMemo(
     () => sources.reduce((sum, source) => sum + source.amount, 0),
@@ -306,11 +391,24 @@ function App() {
     );
   }, [sources]);
 
+  if (isBooting) {
+    return (
+      <main className="boot-screen">
+        <img src={logo} alt="Vertinova" />
+        <span>Memuat Vertinova Finance...</span>
+      </main>
+    );
+  }
+
+  if (!authToken || !user) {
+    return <LoginView onLogin={handleLogin} />;
+  }
+
   return (
     <main className="app-shell">
       <aside className="sidebar" aria-label="Navigasi utama">
         <div className="brand">
-          <div className="brand-mark">V</div>
+          <img className="brand-logo" src={logo} alt="Vertinova" />
           <div>
             <strong>Vertinova</strong>
             <span>Finance OS</span>
@@ -328,8 +426,8 @@ function App() {
 
         <div className="sync-panel">
           <Sparkles size={20} />
-          <strong>AI Cashflow Guard</strong>
-          <span>Memantau anomali hanya dari data real yang masuk.</span>
+          <strong>{user.name}</strong>
+          <span>{user.role === 'super_admin' ? 'Super Admin' : 'Admin'} aktif di sesi ini.</span>
         </div>
       </aside>
 
@@ -347,9 +445,16 @@ function App() {
             <button className="icon-button" aria-label="Notifikasi">
               <Bell size={20} />
             </button>
+            <button className="ghost-button user-button">
+              <UserRound size={17} />
+              {user.name}
+            </button>
             <button className="primary-button" disabled={isSyncing} onClick={syncApiSources}>
               <RefreshCcw size={18} className={isSyncing ? 'spin-icon' : ''} />
               {isSyncing ? 'Sinkron...' : 'Sinkron API'}
+            </button>
+            <button className="icon-button" aria-label="Logout" onClick={handleLogout}>
+              <LogOut size={20} />
             </button>
           </div>
         </header>
@@ -513,11 +618,31 @@ function App() {
                 Export
               </button>
             </div>
-            <div className="empty-state">
-              <BadgeCheck size={22} />
-              <strong>Belum ada transaksi real yang tersinkron.</strong>
-              <span>Data transaksi akan muncul setelah API Simpaskor atau Forbasi mengirim saldo masuk.</span>
-            </div>
+            {transactions.length > 0 ? (
+              <div className="transaction-list">
+                {transactions.map((transaction) => (
+                  <div className="transaction-row" key={transaction.id}>
+                    <div>
+                      <strong>{transaction.source}</strong>
+                      <span>{transaction.description}</span>
+                    </div>
+                    <div>
+                      <b>{formatCurrency(transaction.amount)}</b>
+                      <span>{new Date(transaction.date).toLocaleString('id-ID')}</span>
+                    </div>
+                    <span className={`transaction-status ${transaction.status.toLowerCase()}`}>
+                      {transaction.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <BadgeCheck size={22} />
+                <strong>Belum ada transaksi real yang tersinkron.</strong>
+                <span>Data transaksi akan muncul setelah API Simpaskor atau Forbasi mengirim saldo masuk.</span>
+              </div>
+            )}
           </article>
 
           <article className="panel integration-panel">
@@ -548,6 +673,87 @@ function App() {
           </article>
         </section>
       </section>
+    </main>
+  );
+}
+
+function LoginView({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }) {
+  const [email, setEmail] = useState('admin@vertinova.id');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      await onLogin(email, password);
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Login gagal.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="login-page">
+      <img className="login-bg" src={loginBackground} alt="" />
+      <section className="login-copy">
+        <img src={logo} alt="Vertinova" />
+        <span>Finance Management</span>
+        <h1>Ruang kendali pendapatan Vertinova.</h1>
+        <p>Masuk sebagai admin untuk memantau sumber dana, sinkronisasi API, dan rekonsiliasi transaksi.</p>
+      </section>
+      <motion.form
+        className="login-panel"
+        onSubmit={handleSubmit}
+        initial={{ opacity: 0, y: 22 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+      >
+        <div>
+          <p className="eyebrow">Secure Access</p>
+          <h2>Login Admin</h2>
+        </div>
+
+        <label className="form-field">
+          <span>Email</span>
+          <div>
+            <Mail size={18} />
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="admin@vertinova.id"
+              autoComplete="email"
+              required
+            />
+          </div>
+        </label>
+
+        <label className="form-field">
+          <span>Password</span>
+          <div>
+            <ShieldCheck size={18} />
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="Masukkan password"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+        </label>
+
+        {error ? <div className="form-error">{error}</div> : null}
+
+        <button className="primary-button login-submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Memeriksa...' : 'Masuk Dashboard'}
+        </button>
+      </motion.form>
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { scryptSync, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import mysql from 'mysql2/promise';
 
 const envPath = resolve(process.cwd(), '.env.local');
@@ -29,6 +30,7 @@ if (existsSync(envPath)) {
 
 const port = Number(process.env.FINANCE_API_PORT ?? 8787);
 const apiBaseUrl = process.env.API_BASE_URL ?? 'https://vertinova.id';
+const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS ?? 12);
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -58,14 +60,194 @@ const transactionStatusMap = {
   terjadwal: 'Terjadwal',
 };
 
+const hashPassword = (password, salt = randomBytes(16).toString('hex')) => {
+  const hash = scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+};
+
+const verifyPassword = (password, storedHash) => {
+  const [salt, hash] = String(storedHash).split(':');
+
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const passwordHash = Buffer.from(scryptSync(password, salt, 64).toString('hex'), 'hex');
+  const storedPasswordHash = Buffer.from(hash, 'hex');
+
+  return (
+    passwordHash.length === storedPasswordHash.length &&
+    timingSafeEqual(passwordHash, storedPasswordHash)
+  );
+};
+
+const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+
 const json = (response, statusCode, payload) => {
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
   });
   response.end(JSON.stringify(payload));
+};
+
+const parseBody = async (request) =>
+  new Promise((resolveBody, rejectBody) => {
+    let body = '';
+
+    request.on('data', (chunk) => {
+      body += chunk.toString();
+
+      if (body.length > 1_000_000) {
+        request.destroy();
+        rejectBody(new Error('Payload terlalu besar.'));
+      }
+    });
+
+    request.on('end', () => {
+      if (!body) {
+        resolveBody({});
+        return;
+      }
+
+      try {
+        resolveBody(JSON.parse(body));
+      } catch {
+        rejectBody(new Error('Body harus berupa JSON valid.'));
+      }
+    });
+  });
+
+const getBearerToken = (request) => {
+  const authorization = request.headers.authorization ?? '';
+
+  if (!authorization.startsWith('Bearer ')) {
+    return '';
+  }
+
+  return authorization.slice('Bearer '.length).trim();
+};
+
+const sanitizeUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
+
+const ensureSuperAdmin = async () => {
+  const email = process.env.SUPER_ADMIN_EMAIL;
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const name = process.env.SUPER_ADMIN_NAME ?? 'Super Admin';
+
+  if (!email || !password) {
+    console.warn('SUPER_ADMIN_EMAIL atau SUPER_ADMIN_PASSWORD belum diatur.');
+    return;
+  }
+
+  const [existingRows] = await pool.query('SELECT id FROM admin_users WHERE email = ? LIMIT 1', [
+    email,
+  ]);
+
+  if (existingRows.length > 0) {
+    return;
+  }
+
+  await pool.query(
+    `INSERT INTO admin_users (name, email, password_hash, role, is_active)
+     VALUES (?, ?, ?, 'super_admin', 1)`,
+    [name, email, hashPassword(password)],
+  );
+};
+
+const authenticate = async (request) => {
+  const token = getBearerToken(request);
+
+  if (!token) {
+    return null;
+  }
+
+  const [rows] = await pool.query(
+    `SELECT
+       au.id,
+       au.name,
+       au.email,
+       au.role
+     FROM user_sessions us
+     INNER JOIN admin_users au ON au.id = us.user_id
+     WHERE us.token_hash = ?
+       AND us.expires_at > NOW()
+       AND au.is_active = 1
+     LIMIT 1`,
+    [hashToken(token)],
+  );
+
+  return rows[0] ?? null;
+};
+
+const requireAuth = async (request, response) => {
+  const user = await authenticate(request);
+
+  if (!user) {
+    json(response, 401, { message: 'Sesi tidak valid. Silakan login ulang.' });
+    return null;
+  }
+
+  return user;
+};
+
+const login = async (request) => {
+  const body = await parseBody(request);
+  const email = String(body.email ?? '').trim().toLowerCase();
+  const password = String(body.password ?? '');
+
+  if (!email || !password) {
+    return { statusCode: 400, payload: { message: 'Email dan password wajib diisi.' } };
+  }
+
+  const [rows] = await pool.query(
+    `SELECT id, name, email, password_hash, role
+     FROM admin_users
+     WHERE email = ? AND is_active = 1
+     LIMIT 1`,
+    [email],
+  );
+  const user = rows[0];
+
+  if (!user || !verifyPassword(password, user.password_hash)) {
+    return { statusCode: 401, payload: { message: 'Email atau password salah.' } };
+  }
+
+  const token = randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + sessionTtlHours * 60 * 60 * 1000);
+
+  await pool.query(
+    `INSERT INTO user_sessions (user_id, token_hash, expires_at)
+     VALUES (?, ?, ?)`,
+    [user.id, hashToken(token), expiresAt],
+  );
+  await pool.query('UPDATE admin_users SET last_login_at = NOW() WHERE id = ?', [user.id]);
+
+  return {
+    statusCode: 200,
+    payload: {
+      token,
+      user: sanitizeUser(user),
+      expiresAt: expiresAt.toISOString(),
+    },
+  };
+};
+
+const logout = async (request) => {
+  const token = getBearerToken(request);
+
+  if (token) {
+    await pool.query('DELETE FROM user_sessions WHERE token_hash = ?', [hashToken(token)]);
+  }
+
+  return { message: 'Logout berhasil.' };
 };
 
 const extractAmount = (payload) => {
@@ -264,6 +446,34 @@ const route = async (request, response) => {
     return;
   }
 
+  if (request.method === 'POST' && request.url === '/api/auth/login') {
+    const result = await login(request);
+    json(response, result.statusCode, result.payload);
+    return;
+  }
+
+  if (request.method === 'POST' && request.url === '/api/auth/logout') {
+    json(response, 200, await logout(request));
+    return;
+  }
+
+  if (request.method === 'GET' && request.url === '/api/auth/me') {
+    const user = await requireAuth(request, response);
+
+    if (!user) {
+      return;
+    }
+
+    json(response, 200, { user: sanitizeUser(user) });
+    return;
+  }
+
+  const user = await requireAuth(request, response);
+
+  if (!user) {
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/sources') {
     json(response, 200, { sources: await getSourcesFromDb() });
     return;
@@ -310,6 +520,9 @@ const route = async (request, response) => {
 
   json(response, 404, { message: 'Endpoint tidak ditemukan.' });
 };
+
+await ensureSuperAdmin();
+await pool.query('DELETE FROM user_sessions WHERE expires_at <= NOW()');
 
 createServer((request, response) => {
   route(request, response).catch((error) => {

@@ -1,0 +1,17 @@
+[Unit]
+Description=Vertinova Webhook Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/vertinova
+ExecStart=/usr/bin/node /var/www/vertinova/webhook.js
+Restart=always
+RestartSec=10
+Environment=WEBHOOK_SECRET=vertinova-webhook-secret
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

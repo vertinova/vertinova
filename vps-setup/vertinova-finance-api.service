@@ -1,0 +1,17 @@
+[Unit]
+Description=Vertinova Finance API
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/vertinova
+ExecStart=/usr/bin/npm run api
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

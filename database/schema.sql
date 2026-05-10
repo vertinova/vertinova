@@ -51,6 +51,31 @@ CREATE TABLE IF NOT EXISTS api_sync_logs (
     ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS admin_users (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  name VARCHAR(120) NOT NULL,
+  email VARCHAR(190) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role ENUM('super_admin', 'admin') NOT NULL DEFAULT 'admin',
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL UNIQUE,
+  expires_at DATETIME NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY index_user_expires_at (user_id, expires_at),
+  CONSTRAINT fk_user_sessions_user
+    FOREIGN KEY (user_id) REFERENCES admin_users(id)
+    ON UPDATE CASCADE
+    ON DELETE CASCADE
+);
+
 INSERT INTO revenue_sources (id, name, category, current_balance, status, color, description)
 VALUES
   ('simpaskor', 'Simpaskor', 'api', 0, 'api_belum_terhubung', '#23c483', 'Saldo masuk otomatis dari API Simpaskor.'),
