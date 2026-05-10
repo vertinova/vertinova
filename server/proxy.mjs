@@ -238,6 +238,10 @@ const extractAmount = (payload) => {
     payload?.result?.adminFee,
     payload?.result?.fee,
     payload?.result?.price,
+    payload?.summary?.totalAdminFee,
+    payload?.summary?.total_admin_fee,
+    payload?.summary?.adminFee,
+    payload?.summary?.total,
   ];
 
   for (const candidate of candidates) {
