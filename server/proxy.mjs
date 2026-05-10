@@ -152,6 +152,13 @@ const ensureSuperAdmin = async () => {
   ]);
 
   if (existingRows.length > 0) {
+    await pool.query(
+      `UPDATE admin_users
+       SET name = ?, password_hash = ?, role = 'super_admin', is_active = 1
+       WHERE email = ?`,
+      [name, hashPassword(password), email],
+    );
+    await pool.query('DELETE FROM user_sessions WHERE user_id = ?', [existingRows[0].id]);
     return;
   }
 

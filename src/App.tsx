@@ -3,14 +3,20 @@ import loginBackground from '../bg-landing-page.jpg';
 import logo from '../logo-vertinova.png';
 import {
   Activity,
+  ArrowRight,
   ArrowDownRight,
   ArrowUpRight,
   BadgeCheck,
   Banknote,
   Bell,
+  BrainCircuit,
   Building2,
   CalendarDays,
+  Cloud,
+  Code2,
+  DatabaseZap,
   Download,
+  Globe2,
   Landmark,
   Layers3,
   LineChart,
@@ -18,8 +24,10 @@ import {
   Mail,
   PlugZap,
   RefreshCcw,
+  Rocket,
   School,
   Search,
+  ServerCog,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -179,6 +187,7 @@ const formatCurrency = (value: number) =>
 const toMillions = (value: number) => Math.round(value / 1_000_000);
 
 function App() {
+  const [routePath, setRoutePath] = useState(() => window.location.pathname);
   const [sources, setSources] = useState(baseSources);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -186,6 +195,14 @@ function App() {
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('vertinova_token') ?? '');
   const [user, setUser] = useState<AdminUser | null>(null);
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
+  const isAdminPath = routePath.startsWith('/admin');
+
+  useEffect(() => {
+    const handleRouteChange = () => setRoutePath(window.location.pathname);
+
+    window.addEventListener('popstate', handleRouteChange);
+    return () => window.removeEventListener('popstate', handleRouteChange);
+  }, []);
 
   const authedFetch = useCallback(
     (url: string, init?: RequestInit) =>
@@ -297,7 +314,7 @@ function App() {
 
   useEffect(() => {
     const boot = async () => {
-      if (!authToken) {
+      if (!isAdminPath || !authToken) {
         setIsBooting(false);
         return;
       }
@@ -322,7 +339,7 @@ function App() {
     };
 
     void boot();
-  }, [authToken, authedFetch, loadFinanceData]);
+  }, [authToken, authedFetch, isAdminPath, loadFinanceData]);
 
   const handleLogin = useCallback(async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
@@ -351,6 +368,8 @@ function App() {
     setUser(null);
     setSources(baseSources);
     setTransactions([]);
+    window.history.pushState(null, '', '/admin');
+    setRoutePath('/admin');
   }, [authToken, authedFetch]);
 
   const totalIncome = useMemo(
@@ -390,6 +409,10 @@ function App() {
         : row,
     );
   }, [sources]);
+
+  if (!isAdminPath) {
+    return <LandingPage />;
+  }
 
   if (isBooting) {
     return (
@@ -673,6 +696,177 @@ function App() {
           </article>
         </section>
       </section>
+    </main>
+  );
+}
+
+function LandingPage() {
+  const capabilities = [
+    {
+      title: 'Software Development',
+      description: 'Aplikasi web, mobile, dashboard, dan sistem operasional yang dibuat sesuai alur bisnis.',
+      icon: Code2,
+    },
+    {
+      title: 'Cloud & Infrastructure',
+      description: 'Deployment, server hardening, automation, monitoring, dan arsitektur yang siap tumbuh.',
+      icon: Cloud,
+    },
+    {
+      title: 'Data & AI Automation',
+      description: 'Integrasi data, otomasi proses, AI assistant, dan pipeline kerja yang lebih cepat.',
+      icon: BrainCircuit,
+    },
+    {
+      title: 'API Integration',
+      description: 'Koneksi sistem antar platform, webhook, payment, dan layanan pihak ketiga.',
+      icon: DatabaseZap,
+    },
+  ];
+  const process = ['Discovery', 'Prototype', 'Build', 'Launch', 'Scale'];
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#071914] text-white">
+      <section className="relative min-h-screen">
+        <img className="absolute inset-0 h-full w-full object-cover opacity-35" src={loginBackground} alt="" />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(7,25,20,.96),rgba(7,25,20,.72)_48%,rgba(7,25,20,.36)),linear-gradient(180deg,rgba(7,25,20,.08),#071914_92%)]" />
+        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
+          <div className="flex items-center gap-3">
+            <img className="h-11 w-11 rounded-xl bg-white object-contain p-1" src={logo} alt="Vertinova" />
+            <div>
+              <strong className="block text-lg">Vertinova</strong>
+              <span className="text-xs uppercase tracking-[.24em] text-emerald-100/70">Technology Partner</span>
+            </div>
+          </div>
+          <a
+            className="hidden rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white/80 transition hover:bg-white hover:text-[#071914] sm:inline-flex"
+            href="mailto:hello@vertinova.id"
+          >
+            Hubungi Kami
+          </a>
+        </header>
+
+        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl items-center gap-10 px-5 pb-14 pt-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <motion.div
+            initial={{ opacity: 0, y: 26 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="max-w-4xl"
+          >
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-white/10 px-4 py-2 text-sm font-bold text-emerald-100 backdrop-blur">
+              <Sparkles size={16} />
+              Digital product studio for ambitious teams
+            </span>
+            <h1 className="mt-6 max-w-5xl text-[clamp(3.2rem,8vw,7.6rem)] font-black leading-[.88] tracking-normal text-white">
+              Teknologi yang membuat bisnis bergerak lebih cepat.
+            </h1>
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/72">
+              Vertinova membantu perusahaan merancang, membangun, dan menjalankan sistem digital modern:
+              dari aplikasi, integrasi API, otomasi, sampai infrastruktur cloud yang stabil.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-5 font-black text-[#071914] shadow-[0_24px_60px_rgba(35,196,131,.25)] transition hover:-translate-y-0.5"
+                href="mailto:hello@vertinova.id?subject=Konsultasi%20Project%20Vertinova"
+              >
+                Konsultasi Project
+                <ArrowRight size={18} />
+              </a>
+              <a
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-5 font-bold text-white backdrop-blur transition hover:bg-white hover:text-[#071914]"
+                href="#capabilities"
+              >
+                Lihat Kapabilitas
+              </a>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: 26 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.65, delay: 0.1 }}
+            className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-[0_28px_90px_rgba(0,0,0,.28)] backdrop-blur-xl"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="text-xs font-black uppercase text-emerald-100/70">Delivery System</p>
+                <h2 className="mt-1 text-2xl font-black">From idea to launch</h2>
+              </div>
+              <Rocket className="text-[#b9ffdc]" size={28} />
+            </div>
+            <div className="mt-5 grid gap-3">
+              {process.map((item, index) => (
+                <div className="flex items-center gap-3 rounded-xl bg-white/10 p-3" key={item}>
+                  <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#b9ffdc] font-black text-[#071914]">
+                    {index + 1}
+                  </span>
+                  <span className="font-bold text-white/90">{item}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section id="capabilities" className="bg-[#f4f7f2] px-5 py-20 text-[#10231f] sm:px-8">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
+            <div>
+              <p className="text-xs font-black uppercase text-[#377463]">Kapabilitas</p>
+              <h2 className="mt-2 max-w-3xl text-[clamp(2.2rem,5vw,4.8rem)] font-black leading-[.95]">
+                Sistem digital yang dirancang untuk kerja nyata.
+              </h2>
+            </div>
+            <p className="max-w-md leading-7 text-[#65766f]">
+              Kami fokus pada solusi yang bisa dipakai tim, mudah dirawat, dan punya ruang untuk berkembang
+              saat bisnis bertambah besar.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {capabilities.map((capability) => (
+              <article
+                className="rounded-2xl border border-[#dbe6df] bg-white p-5 shadow-[0_22px_60px_rgba(45,65,57,.09)]"
+                key={capability.title}
+              >
+                <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#e6f9ef] text-[#0e6d49]">
+                  <capability.icon size={23} />
+                </div>
+                <h3 className="mt-5 text-xl font-black">{capability.title}</h3>
+                <p className="mt-3 leading-7 text-[#65766f]">{capability.description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-white px-5 py-16 text-[#10231f] sm:px-8">
+        <div className="mx-auto grid max-w-7xl gap-6 rounded-3xl bg-[#071914] p-6 text-white md:grid-cols-[1fr_auto] md:items-center md:p-9">
+          <div>
+            <p className="text-xs font-black uppercase text-[#b9ffdc]">Siap membangun?</p>
+            <h2 className="mt-2 text-[clamp(2rem,4vw,4rem)] font-black leading-none">
+              Mari ubah proses bisnis menjadi produk digital yang solid.
+            </h2>
+          </div>
+          <a
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 font-black text-[#071914] transition hover:-translate-y-0.5"
+            href="mailto:hello@vertinova.id?subject=Konsultasi%20Teknologi%20Vertinova"
+          >
+            Mulai Diskusi
+            <Globe2 size={18} />
+          </a>
+        </div>
+      </section>
+
+      <footer className="bg-[#071914] px-5 py-8 text-white/60 sm:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 text-sm sm:flex-row">
+          <span>© {new Date().getFullYear()} Vertinova. Technology partner for modern business.</span>
+          <span className="inline-flex items-center gap-2">
+            <ServerCog size={16} />
+            vertinova.id
+          </span>
+        </div>
+      </footer>
     </main>
   );
 }

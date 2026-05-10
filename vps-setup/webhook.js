@@ -1,6 +1,6 @@
-const http = require('http');
-const crypto = require('crypto');
-const { exec } = require('child_process');
+import http from 'http';
+import crypto from 'crypto';
+import { exec } from 'child_process';
 
 const PORT = 9000;
 const SECRET = process.env.WEBHOOK_SECRET || 'vertinova-webhook-secret';

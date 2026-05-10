@@ -1,7 +1,7 @@
 {
-  "name": "Vertinova Finance Management",
+  "name": "Vertinova Technology Partner",
   "short_name": "Vertinova",
-  "description": "Dashboard management keuangan Vertinova untuk sumber pendapatan API dan manual.",
+  "description": "Vertinova membangun solusi teknologi, aplikasi, integrasi, otomasi, dan infrastruktur digital.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

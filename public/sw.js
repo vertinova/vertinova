@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vertinova-finance-v1';
+const CACHE_NAME = 'vertinova-company-v2';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
