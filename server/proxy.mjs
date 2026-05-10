@@ -377,7 +377,13 @@ const syncApiSources = async () =>
 
 const route = async (request, response) => {
   if (request.method === 'OPTIONS') {
-    json(response, 204, {});
+    response.writeHead(204, {
+      'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Max-Age': '86400',
+    });
+    response.end();
     return;
   }
 
@@ -462,15 +468,26 @@ const route = async (request, response) => {
   json(response, 404, { message: 'Endpoint tidak ditemukan.' });
 };
 
+process.on('uncaughtException', (error) => {
+  console.error('[Vertinova API] Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Vertinova API] Unhandled rejection:', reason);
+});
+
 await ensureRevenueSources();
 await ensureSuperAdmin();
 await prisma.userSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
 
 createServer((request, response) => {
   route(request, response).catch((error) => {
-    json(response, 500, {
-      message: error instanceof Error ? error.message : 'Terjadi kesalahan server.',
-    });
+    console.error('[Vertinova API] Route error:', error);
+    if (!response.headersSent) {
+      json(response, 500, {
+        message: error instanceof Error ? error.message : 'Terjadi kesalahan server.',
+      });
+    }
   });
 }).listen(port, () => {
   console.log(`[Vertinova API] Running on port ${port}`);
