@@ -732,48 +732,12 @@ function LandingPage() {
   ];
 
   const projects = [
-    {
-      name: 'Forbasi Finance',
-      category: 'Dashboard & API',
-      description: 'Sistem manajemen keuangan multi-sumber dengan integrasi API real-time.',
-      color: '#23c483',
-      icon: WalletCards,
-    },
-    {
-      name: 'Desa Digital',
-      category: 'Gov-Tech',
-      description: 'Platform layanan administrasi desa: surat, laporan, dan anggaran online.',
-      color: '#3b82f6',
-      icon: Landmark,
-    },
-    {
-      name: 'Simpaskor',
-      category: 'Fintech',
-      description: 'Sinkronisasi saldo dan laporan keuangan otomatis berbasis webhook.',
-      color: '#f59e0b',
-      icon: PlugZap,
-    },
-    {
-      name: 'School OS',
-      category: 'EdTech',
-      description: 'Sistem informasi sekolah: absensi, nilai, pembayaran SPP, dan komunikasi wali.',
-      color: '#ef5da8',
-      icon: School,
-    },
-    {
-      name: 'Disnaker Portal',
-      category: 'Gov-Tech',
-      description: 'Portal perizinan ketenagakerjaan dengan alur digital dan notifikasi otomatis.',
-      color: '#8b5cf6',
-      icon: Building2,
-    },
-    {
-      name: 'Analytics Engine',
-      category: 'Data & AI',
-      description: 'Pipeline data dan AI assistant untuk laporan bisnis dan prediksi anggaran.',
-      color: '#0ea5e9',
-      icon: BrainCircuit,
-    },
+    { tag: 'Dashboard & Analitik', bg: 'from-emerald-900 to-emerald-700',   accent: '#b9ffdc', dots: ['#23c483','#10b981','#34d399'] },
+    { tag: 'Gov-Tech',             bg: 'from-blue-900 to-blue-700',         accent: '#93c5fd', dots: ['#3b82f6','#60a5fa','#1d4ed8'] },
+    { tag: 'Fintech',              bg: 'from-amber-800 to-amber-600',       accent: '#fde68a', dots: ['#f59e0b','#fbbf24','#d97706'] },
+    { tag: 'EdTech',               bg: 'from-pink-900 to-rose-700',         accent: '#fbcfe8', dots: ['#ef5da8','#f472b6','#be185d'] },
+    { tag: 'Gov-Tech',             bg: 'from-violet-900 to-violet-700',     accent: '#ddd6fe', dots: ['#8b5cf6','#a78bfa','#6d28d9'] },
+    { tag: 'Data & AI',            bg: 'from-sky-900 to-cyan-700',          accent: '#bae6fd', dots: ['#0ea5e9','#38bdf8','#0369a1'] },
   ];
 
   const process = [
@@ -819,6 +783,12 @@ function LandingPage() {
               href="mailto:hello@vertinova.id"
             >
               Hubungi Kami
+            </a>
+            <a
+              className="rounded-full bg-[#b9ffdc] px-4 py-2 text-sm font-black text-[#071914] transition hover:bg-white"
+              href="/admin"
+            >
+              Masuk
             </a>
           </nav>
         </header>
@@ -946,36 +916,50 @@ function LandingPage() {
       {/* ── PROJECTS ─────────────────────────────────────────────── */}
       <section id="projects" className="bg-white px-5 py-20 text-[#10231f] sm:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-10">
-            <p className="text-xs font-black uppercase text-[#377463]">Portofolio</p>
-            <h2 className="mt-2 text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
-              Proyek yang sudah berjalan.
-            </h2>
+          <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase text-[#377463]">Portofolio</p>
+              <h2 className="mt-2 text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
+                Proyek pilihan kami.
+              </h2>
+            </div>
+            <p className="max-w-sm text-sm leading-7 text-[#65766f]">Setiap project dikerjakan dengan standar produksi penuh — scalable, documented, dan maintainable.</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
             {projects.map((project, index) => (
               <motion.article
-                key={project.name}
-                className="group relative overflow-hidden rounded-2xl border border-[#dbe6df] bg-[#f4f7f2] p-6 transition hover:shadow-[0_28px_60px_rgba(45,65,57,.14)]"
+                key={index}
+                className="group overflow-hidden rounded-2xl border border-[#dbe6df] bg-[#f4f7f2] transition hover:-translate-y-1 hover:shadow-[0_28px_60px_rgba(45,65,57,.14)]"
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.07 }}
               >
-                <div
-                  className="mb-4 grid h-12 w-12 place-items-center rounded-xl"
-                  style={{ backgroundColor: `${project.color}1a`, color: project.color }}
-                >
-                  <project.icon size={22} />
+                {/* Dummy image area */}
+                <div className={`relative h-44 bg-gradient-to-br ${project.bg} overflow-hidden`}>
+                  {/* Grid lines */}
+                  <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px)', backgroundSize: '32px 32px' }} />
+                  {/* Decorative dots */}
+                  <div className="absolute bottom-5 left-6 flex gap-2">
+                    {project.dots.map((dot, i) => (
+                      <span key={i} className="block h-8 w-8 rounded-full opacity-80" style={{ backgroundColor: dot }} />
+                    ))}
+                  </div>
+                  {/* Corner accent bar */}
+                  <div className="absolute right-0 top-0 h-full w-1.5" style={{ backgroundColor: project.accent, opacity: 0.7 }} />
+                  {/* Tag */}
+                  <span className="absolute left-4 top-4 rounded-full px-3 py-1 text-xs font-black" style={{ backgroundColor: project.accent + '22', color: project.accent }}>
+                    {project.tag}
+                  </span>
                 </div>
-                <span
-                  className="mb-2 inline-block rounded-full px-3 py-0.5 text-xs font-bold"
-                  style={{ backgroundColor: `${project.color}18`, color: project.color }}
-                >
-                  {project.category}
-                </span>
-                <h3 className="mt-1 text-xl font-black">{project.name}</h3>
-                <p className="mt-2 leading-7 text-[#65766f]">{project.description}</p>
+                {/* Card footer */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.dots[0] }} />
+                    <span className="text-sm font-bold text-[#65766f]">{project.tag}</span>
+                  </div>
+                  <ArrowRight size={16} className="text-[#b0bcb8] transition group-hover:translate-x-1 group-hover:text-[#0e6d49]" />
+                </div>
               </motion.article>
             ))}
           </div>
