@@ -745,7 +745,7 @@ const route = async (request, response) => {
       json(response, 200, {
         sourceId,
         items,
-        total: items.reduce((s, i) => s + (i.adminFee * (i.quantity || 1)), 0),
+        total: items.reduce((s, i) => s + i.adminFee, 0),
         count: items.length,
       });
     } catch (error) {

@@ -1317,7 +1317,7 @@ function DetailModal({
   sourceId: 'simpaskor' | 'forbasi';
   onClose: () => void;
 }) {
-  const total = items.reduce((sum, item) => sum + item.adminFee * (item.quantity || 1), 0);
+  const total = items.reduce((sum, item) => sum + item.adminFee, 0);
   const title = sourceId === 'simpaskor' ? 'Detail Transaksi Simpaskor' : 'Detail Transaksi Forbasi';
 
   return (
