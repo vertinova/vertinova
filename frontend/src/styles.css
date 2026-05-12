@@ -384,8 +384,12 @@
     @apply rounded-full bg-[#fff0ca] px-2 py-1.5 text-xs font-extrabold text-[#734800];
   }
 
-  .source-status.api {
+  .source-status.sinkron {
     @apply bg-[#def8eb] text-[#0e6d49];
+  }
+
+  .source-status.error {
+    @apply bg-[#ffe8ee] text-[#8f1f36];
   }
 
   .source-card h3 {

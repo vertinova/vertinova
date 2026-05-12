@@ -34,6 +34,25 @@ const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS ?? 12);
 
 const prisma = new PrismaClient();
 
+const loginAttempts = new Map();
+
+const checkRateLimit = (ip) => {
+  const entry = loginAttempts.get(ip);
+  if (!entry) return true;
+  if (Date.now() > entry.resetAt) { loginAttempts.delete(ip); return true; }
+  return entry.count < 5;
+};
+
+const recordFailedLogin = (ip) => {
+  const now = Date.now();
+  const existing = loginAttempts.get(ip);
+  if (!existing || now > existing.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
+  } else {
+    loginAttempts.set(ip, { ...existing, count: existing.count + 1 });
+  }
+};
+
 const statusMap = {
   sinkron: 'Sinkron',
   api_belum_terhubung: 'API Belum Terhubung',
@@ -72,13 +91,14 @@ const verifyPassword = (password, storedHash) => {
 const hashToken = (token) => createHash('sha256').update(token).digest('hex');
 
 const json = (response, statusCode, payload) => {
-  // Serialize BEFORE writeHead so if stringify throws, headers are not yet sent
   const body = JSON.stringify(payload, (_, v) => (typeof v === 'bigint' ? Number(v) : v));
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
   });
   response.end(body);
 };
@@ -263,6 +283,16 @@ const resolveApiUrl = (url) => {
   return new URL(url, apiBaseUrl).toString();
 };
 
+const buildSimpaskorUrl = (baseUrl) => {
+  if (!baseUrl) return '';
+  const year = new Date().getFullYear();
+  const url = new URL(resolveApiUrl(baseUrl));
+  url.searchParams.set('from', `${year}-01-01`);
+  url.searchParams.set('to', `${year}-12-31`);
+  url.searchParams.set('includeDetails', 'true');
+  return url.toString();
+};
+
 const getSourcesFromDb = async () => {
   const rows = await prisma.revenueSource.findMany();
   return rows
@@ -275,7 +305,7 @@ const getSourcesFromDb = async () => {
       status: statusMap[row.status] ?? 'API Belum Terhubung',
       color: row.color,
       description: row.description,
-      lastSync: row.lastSyncedAt,
+      lastSync: row.lastSyncedAt?.toISOString() ?? null,
     }));
 };
 
@@ -310,6 +340,38 @@ const updateSourceSync = async ({ id, amount, status, message, payload }) => {
   });
 };
 
+const fetchWithRetry = async (url, options, retries = 1) => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      if (attempt === retries) throw error;
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+};
+
+const createSyncTransaction = async (sourceId, sourceName, amount) => {
+  if (amount <= 0) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const externalId = `sync-${today.toISOString().slice(0, 10)}`;
+  const dateLabel = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+  await prisma.financeTransaction.upsert({
+    where: { unique_source_external_id: { sourceId, externalId } },
+    create: {
+      sourceId,
+      externalId,
+      direction: 'income',
+      amount,
+      description: `Saldo API ${sourceName} per ${dateLabel}`,
+      status: 'terverifikasi',
+      occurredAt: today,
+    },
+    update: { amount },
+  });
+};
+
 const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' }) => {
   if (!url) {
     const result = {
@@ -329,7 +391,7 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
   }
 
   try {
-    const response = await fetch(resolveApiUrl(url), { headers });
+    const response = await fetchWithRetry(resolveApiUrl(url), { headers });
     const payload = await response.json().catch(() => ({}));
 
     if (!response.ok) {
@@ -351,6 +413,7 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
       message: `Saldo ${name} berhasil disinkronkan dari API.`,
     };
     await updateSourceSync({ ...result, payload });
+    await createSyncTransaction(id, name, result.amount);
     return result;
   } catch (error) {
     const result = {
@@ -369,8 +432,9 @@ const syncApiSources = async () =>
     fetchBalance({
       id: 'simpaskor',
       name: 'Simpaskor',
-      url: process.env.SIMPASKOR_BALANCE_URL,
+      url: buildSimpaskorUrl(process.env.SIMPASKOR_BALANCE_URL),
       apiKey: process.env.SIMPASKOR_API_KEY,
+      apiKeyHeader: process.env.SIMPASKOR_API_KEY_HEADER ?? 'X-API-Key',
     }),
     fetchBalance({
       id: 'forbasi',
@@ -400,7 +464,13 @@ const route = async (request, response) => {
   }
 
   if (request.method === 'POST' && request.url === '/api/auth/login') {
+    const ip = request.socket?.remoteAddress ?? 'unknown';
+    if (!checkRateLimit(ip)) {
+      json(response, 429, { message: 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.' });
+      return;
+    }
     const result = await login(request);
+    if (result.statusCode !== 200) recordFailedLogin(ip);
     json(response, result.statusCode, result.payload);
     return;
   }
@@ -451,8 +521,9 @@ const route = async (request, response) => {
       source: await fetchBalance({
         id: 'simpaskor',
         name: 'Simpaskor',
-        url: process.env.SIMPASKOR_BALANCE_URL,
+        url: buildSimpaskorUrl(process.env.SIMPASKOR_BALANCE_URL),
         apiKey: process.env.SIMPASKOR_API_KEY,
+        apiKeyHeader: process.env.SIMPASKOR_API_KEY_HEADER ?? 'X-API-Key',
       }),
     });
     return;
@@ -468,6 +539,17 @@ const route = async (request, response) => {
         apiKeyHeader: process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key',
       }),
     });
+    return;
+  }
+
+  if (request.method === 'GET' && request.url === '/api/finance/dashboard') {
+    const [sources, transactions] = await Promise.all([
+      getSourcesFromDb(),
+      getTransactionsFromDb(),
+    ]);
+    const totalIncome = sources.reduce((sum, s) => sum + s.amount, 0);
+    const apiIncome = sources.filter((s) => s.category === 'api').reduce((sum, s) => sum + s.amount, 0);
+    json(response, 200, { sources, transactions, summary: { totalIncome, apiIncome } });
     return;
   }
 

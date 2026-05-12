@@ -63,6 +63,7 @@ type RevenueSource = {
   icon: LucideIcon;
   status: 'Sinkron' | 'API Belum Terhubung' | 'Manual';
   description: string;
+  lastSync?: string | null;
 };
 
 type Transaction = {
@@ -78,7 +79,7 @@ type ApiSourcePayload = {
   id: SourceId;
   amount: number;
   status: RevenueSource['status'];
-  lastSync?: string;
+  lastSync?: string | null;
   message?: string;
 };
 
@@ -218,22 +219,21 @@ function App() {
 
   const loadFinanceData = useCallback(async () => {
     try {
-      const [sourcesResponse, transactionsResponse] = await Promise.all([
-        authedFetch('/api/finance/sources'),
-        authedFetch('/api/finance/transactions'),
-      ]);
+      const response = await authedFetch('/api/finance/dashboard');
 
-      if (sourcesResponse.status === 401 || transactionsResponse.status === 401) {
+      if (response.status === 401) {
         throw new Error('Sesi berakhir. Silakan login ulang.');
       }
 
-      if (!sourcesResponse.ok || !transactionsResponse.ok) {
+      if (!response.ok) {
         throw new Error('API finance proxy tidak merespons dengan benar.');
       }
 
-      const sourcesPayload = (await sourcesResponse.json()) as { sources: ApiSourcePayload[] };
-      const transactionsPayload = (await transactionsResponse.json()) as { transactions: Transaction[] };
-      const payload = sourcesPayload;
+      const payload = (await response.json()) as {
+        sources: ApiSourcePayload[];
+        transactions: Transaction[];
+        summary: { totalIncome: number; apiIncome: number };
+      };
       const apiById = new Map(payload.sources.map((source) => [source.id, source]));
 
       setSources((currentSources) =>
@@ -252,11 +252,11 @@ function App() {
             status: apiSource.status,
             target: apiSource.amount > 0 ? 100 : 0,
             growth: 0,
-            description: apiSource.message ?? source.description,
+            lastSync: apiSource.lastSync ?? null,
           };
         }),
       );
-      setTransactions(transactionsPayload.transactions);
+      setTransactions(payload.transactions);
 
       setSyncMessage('Data dibaca dari database lokal Vertinova Finance.');
     } catch (error) {
@@ -299,7 +299,7 @@ function App() {
             status: apiSource.status,
             target: apiSource.amount > 0 ? 100 : 0,
             growth: 0,
-            description: apiSource.message ?? source.description,
+            lastSync: apiSource.lastSync ?? null,
           };
         }),
       );
@@ -526,11 +526,16 @@ function App() {
                 <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
                   <source.icon size={20} />
                 </div>
-                <span className={`source-status ${source.category}`}>{source.status}</span>
+                <span className={`source-status ${source.status === 'Sinkron' ? 'sinkron' : source.status === 'Manual' ? 'manual' : 'error'}`}>{source.status}</span>
               </div>
               <h3>{source.name}</h3>
               <strong>{formatCurrency(source.amount)}</strong>
               <p>{source.description}</p>
+              {source.lastSync ? (
+                <span className="block text-xs text-muted/60 -mt-1">
+                  Sinkron: {new Date(source.lastSync).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              ) : null}
               <div className="progress-track">
                 <span style={{ width: `${source.target}%`, backgroundColor: source.color }} />
               </div>
@@ -1195,7 +1200,7 @@ function MetricCard({
         <small>{note}</small>
       </div>
       <div className="trend-chip">
-        {trend.startsWith('+') ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+        {trend.startsWith('-') ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}
         {trend}
       </div>
     </motion.article>
