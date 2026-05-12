@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 
-const loadEnvFile = (envPath) => {
+const loadEnvFile = (envPath, override = false) => {
   if (!existsSync(envPath)) {
     return;
   }
@@ -27,7 +27,11 @@ const loadEnvFile = (envPath) => {
 
     const key = trimmed.slice(0, separatorIndex).trim();
     const value = trimmed.slice(separatorIndex + 1).trim().replace(/^["']|["']$/g, '');
-    process.env[key] ??= value;
+    if (override) {
+      process.env[key] = value;
+    } else {
+      process.env[key] ??= value;
+    }
   }
 };
 
@@ -37,12 +41,15 @@ const rootDir = resolve(backendDir, '..');
 
 [
   resolve(rootDir, '.env'),
-  resolve(rootDir, '.env.local'),
   resolve(backendDir, '.env'),
-  resolve(backendDir, '.env.local'),
   resolve(process.cwd(), '.env'),
+].forEach(p => loadEnvFile(p, false));
+
+[
+  resolve(rootDir, '.env.local'),
+  resolve(backendDir, '.env.local'),
   resolve(process.cwd(), '.env.local'),
-].forEach(loadEnvFile);
+].forEach(p => loadEnvFile(p, true));
 
 if (!process.env.DATABASE_URL && process.env.DB_NAME) {
   const user = encodeURIComponent(process.env.DB_USER ?? 'root');
