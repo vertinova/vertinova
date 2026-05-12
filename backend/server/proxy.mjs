@@ -318,6 +318,14 @@ const normalizeAmount = (value) => {
   return Number(value);
 };
 
+const firstPresent = (...values) => values.find((value) => value !== undefined && value !== null && value !== '');
+
+const normalizeDate = (value) => {
+  if (!value) return new Date();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+};
+
 const extractAmount = (payload) => {
   const candidates = [
     payload?.amount,
@@ -372,6 +380,74 @@ const extractAmount = (payload) => {
 
   return 0;
 };
+
+const extractWebhookRows = (payload) => {
+  const candidates = [
+    payload?.items,
+    payload?.transactions,
+    payload?.data?.items,
+    payload?.data?.transactions,
+    payload?.result?.items,
+    payload?.result?.transactions,
+    payload?.details?.tickets,
+    payload?.details?.voting,
+    payload?.details?.registrations,
+    payload?.details?.kta,
+    payload?.data?.details?.tickets,
+    payload?.data?.details?.voting,
+    payload?.data?.details?.registrations,
+    payload?.data?.details?.kta,
+  ];
+
+  const rows = candidates.find(Array.isArray);
+  return rows ?? [payload];
+};
+
+const extractExternalId = (payload) =>
+  String(
+    firstPresent(
+      payload?.externalId,
+      payload?.external_id,
+      payload?.orderId,
+      payload?.order_id,
+      payload?.midtransOrderId,
+      payload?.transactionId,
+      payload?.transaction_id,
+      payload?.paymentId,
+      payload?.payment_id,
+      payload?.invoiceId,
+      payload?.invoice_id,
+      payload?.id,
+    ) ?? createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 40),
+  );
+
+const extractDescription = (sourceName, payload) =>
+  String(
+    firstPresent(
+      payload?.description,
+      payload?.title,
+      payload?.eventTitle,
+      payload?.clubName,
+      payload?.name,
+      payload?.type,
+      `Pembayaran ${sourceName}`,
+    ),
+  ).slice(0, 255);
+
+const extractOccurredAt = (payload) =>
+  normalizeDate(
+    firstPresent(
+      payload?.paidAt,
+      payload?.paid_at,
+      payload?.paymentDate,
+      payload?.payment_date,
+      payload?.settlementTime,
+      payload?.settlement_time,
+      payload?.createdAt,
+      payload?.created_at,
+      payload?.date,
+    ),
+  );
 
 const resolveApiUrl = (url) => {
   if (!url) {
@@ -473,6 +549,87 @@ const createSyncTransaction = async (sourceId, sourceName, amount) => {
     },
     update: { amount },
   });
+};
+
+const sourceNames = {
+  simpaskor: 'Simpaskor',
+  forbasi: 'Forbasi',
+};
+
+const applyWebhookTransactions = async (sourceId, payload) => {
+  const sourceName = sourceNames[sourceId] ?? sourceId;
+  const rows = extractWebhookRows(payload);
+  const validRows = rows
+    .map((row) => ({
+      row,
+      amount: extractAmount(row),
+      externalId: extractExternalId(row),
+      occurredAt: extractOccurredAt(row),
+      description: extractDescription(sourceName, row),
+    }))
+    .filter((entry) => Number.isFinite(entry.amount) && entry.amount > 0);
+
+  if (validRows.length === 0) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId,
+        status: 'failed',
+        message: `Webhook ${sourceName} diterima tanpa nominal valid.`,
+        responsePayload: payload,
+      },
+    });
+    return { inserted: 0, total: 0 };
+  }
+
+  let total = 0;
+  for (const entry of validRows) {
+    total += entry.amount;
+    await prisma.financeTransaction.upsert({
+      where: { unique_source_external_id: { sourceId, externalId: entry.externalId } },
+      create: {
+        sourceId,
+        externalId: entry.externalId,
+        direction: 'income',
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.occurredAt,
+        rawPayload: entry.row,
+      },
+      update: {
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.occurredAt,
+        rawPayload: entry.row,
+      },
+    });
+  }
+
+  const aggregate = await prisma.financeTransaction.aggregate({
+    where: { sourceId, direction: 'income', status: 'terverifikasi' },
+    _sum: { amount: true },
+  });
+
+  await prisma.revenueSource.update({
+    where: { id: sourceId },
+    data: {
+      currentBalance: aggregate._sum.amount ?? 0,
+      status: 'sinkron',
+      lastSyncedAt: new Date(),
+    },
+  });
+
+  await prisma.apiSyncLog.create({
+    data: {
+      sourceId,
+      status: 'success',
+      message: `Webhook ${sourceName} menyimpan ${validRows.length} transaksi.`,
+      responsePayload: payload,
+    },
+  });
+
+  return { inserted: validRows.length, total };
 };
 
 const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' }) => {
@@ -599,6 +756,29 @@ const route = async (request, response) => {
         adminFee: readNumberEnv('FORBASI_ADMIN_FEE', 0),
       }),
     );
+    return;
+  }
+
+  if (request.method === 'POST' && /^\/api\/finance\/webhooks\/(simpaskor|forbasi)$/.test(request.url)) {
+    const sourceId = request.url.split('/')[4];
+
+    if (!verifyExternalApiKey(request, sourceId)) {
+      json(response, 401, { message: `API key webhook ${sourceId} tidak valid.` });
+      return;
+    }
+
+    try {
+      const payload = await parseBody(request);
+      const result = await applyWebhookTransactions(sourceId, payload);
+      json(response, 200, {
+        ok: true,
+        sourceId,
+        message: `Webhook ${sourceNames[sourceId]} diproses.`,
+        ...result,
+      });
+    } catch (error) {
+      json(response, 400, { message: error instanceof Error ? error.message : 'Webhook tidak valid.' });
+    }
     return;
   }
 

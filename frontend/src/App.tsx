@@ -33,7 +33,6 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
-  Menu,
   PlugZap,
   RefreshCcw,
   School,
@@ -51,7 +50,7 @@ import logo from '../logo-vertinova.png';
 
 type SourceId = 'simpaskor' | 'forbasi' | 'desa' | 'sekolah' | 'swasta';
 type ApiSourceId = Extract<SourceId, 'simpaskor' | 'forbasi'>;
-type ViewId = 'dashboard' | 'sources' | 'integrations' | 'transactions' | 'reports';
+type ViewId = 'dashboard' | 'transactions' | 'reports';
 type NavItem = {
   id: ViewId;
   label: string;
@@ -183,20 +182,6 @@ const navItems: NavItem[] = [
     description: 'Saldo dan kondisi utama',
     icon: LineChart,
     group: 'Monitor',
-  },
-  {
-    id: 'sources',
-    label: 'Sumber Dana',
-    description: 'API dan input manual',
-    icon: WalletCards,
-    group: 'Monitor',
-  },
-  {
-    id: 'integrations',
-    label: 'Koneksi API',
-    description: 'Simpaskor dan Forbasi',
-    icon: PlugZap,
-    group: 'Operasional',
   },
   {
     id: 'transactions',
@@ -577,10 +562,6 @@ function App() {
 
   return (
     <main className="app-shell">
-      <button className="mobile-menu" aria-label="Buka menu" onClick={() => setSidebarOpen(true)}>
-        <Menu size={20} />
-      </button>
-
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} aria-label="Navigasi utama">
         <div className="brand">
           <img className="brand-logo" src={logo} alt="Vertinova" />
@@ -635,10 +616,16 @@ function App() {
 
       <section className="content">
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Vertinova Finance</p>
-            <h1>{activeLabel}</h1>
-            <span className="page-subtitle">{activeSubtitle}. Pantau saldo, koneksi API, rekonsiliasi, dan laporan dalam satu ruang kerja.</span>
+          <div className="topbar-main">
+            <div className="topbar-copy">
+              <p className="eyebrow">Vertinova Finance</p>
+              <h1>{activeLabel}</h1>
+              <span className="page-subtitle">{activeSubtitle}. Pantau saldo, koneksi API, rekonsiliasi, dan laporan dalam satu ruang kerja.</span>
+            </div>
+            <button className="header-logout" aria-label="Logout" onClick={handleLogout}>
+              <LogOut size={18} />
+              <span>Keluar</span>
+            </button>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -659,9 +646,6 @@ function App() {
             <button className="primary-button" disabled={isSyncing} onClick={syncApiSources}>
               {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
               {isSyncing ? 'Sinkron...' : 'Sinkron API'}
-            </button>
-            <button className="icon-button" aria-label="Logout" onClick={handleLogout}>
-              <LogOut size={20} />
             </button>
           </div>
         </header>
@@ -684,19 +668,6 @@ function App() {
             transactions={transactions}
             verifiedCount={verifiedCount}
             onExportTransactions={exportTransactions}
-          />
-        ) : null}
-
-        {activeView === 'sources' ? (
-          <SourcesView sources={filteredSources} totalIncome={totalIncome} onExportSources={exportSources} />
-        ) : null}
-
-        {activeView === 'integrations' ? (
-          <IntegrationsView
-            apiSources={apiSources}
-            isSyncing={isSyncing}
-            onOpenTransactions={() => setActiveView('transactions')}
-            onSync={syncApiSources}
           />
         ) : null}
 
@@ -723,6 +694,22 @@ function App() {
         ) : null}
       </section>
 
+      <nav className="bottom-nav" aria-label="Navigasi utama mobile">
+        {navItems.map(({ id, label, icon: Icon }) => (
+          <button
+            aria-label={label}
+            aria-current={activeView === id ? 'page' : undefined}
+            className={activeView === id ? 'active' : ''}
+            key={id}
+            onClick={() => {
+              setActiveView(id);
+              setSidebarOpen(false);
+            }}
+          >
+            <Icon size={19} />
+          </button>
+        ))}
+      </nav>
     </main>
   );
 }
