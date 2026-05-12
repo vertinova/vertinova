@@ -681,6 +681,79 @@ const route = async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)$/.test(request.url)) {
+    const sourceId = request.url.split('/')[4];
+    let url = '';
+    let apiKey = '';
+    let apiKeyHeader = 'X-API-Key';
+
+    if (sourceId === 'simpaskor') {
+      const base = buildSimpaskorUrl(process.env.SIMPASKOR_BALANCE_URL);
+      if (!base) { json(response, 503, { message: 'URL Simpaskor belum diatur.' }); return; }
+      url = base;
+      apiKey = process.env.SIMPASKOR_API_KEY ?? '';
+    } else {
+      const base = process.env.FORBASI_BALANCE_URL;
+      if (!base) { json(response, 503, { message: 'URL Forbasi belum diatur.' }); return; }
+      const u = new URL(resolveApiUrl(base));
+      u.searchParams.set('includeDetails', 'true');
+      url = u.toString();
+      apiKey = process.env.FORBASI_API_KEY ?? '';
+      apiKeyHeader = process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key';
+    }
+
+    try {
+      const headers = { Accept: 'application/json' };
+      if (apiKey) headers[apiKeyHeader] = apiKey;
+      const apiRes = await fetchWithRetry(url, { headers });
+      const payload = await apiRes.json().catch(() => ({}));
+
+      if (!apiRes.ok) {
+        json(response, 502, { message: `API ${sourceId} mengembalikan status ${apiRes.status}.` });
+        return;
+      }
+
+      let items = [];
+      if (sourceId === 'simpaskor') {
+        const d = payload?.details ?? {};
+        const tickets = (d.tickets ?? []).map((r) => ({
+          id: r.id, type: 'Tiket', title: r.eventTitle ?? '-',
+          subtitle: r.eventSlug ?? '', quantity: r.quantity ?? 1,
+          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
+        }));
+        const voting = (d.voting ?? []).map((r) => ({
+          id: r.id, type: 'Voting', title: r.eventTitle ?? '-',
+          subtitle: r.eventSlug ?? '', quantity: r.voteCount ?? 1,
+          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
+        }));
+        const regs = (d.registrations ?? []).map((r) => ({
+          id: r.id, type: 'Pendaftaran', title: r.eventTitle ?? '-',
+          subtitle: r.eventSlug ?? '', quantity: 1,
+          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
+        }));
+        items = [...tickets, ...voting, ...regs].sort(
+          (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime()
+        );
+      } else {
+        items = (payload?.details?.kta ?? []).map((r) => ({
+          id: String(r.id), type: 'KTA', title: r.clubName ?? '-',
+          subtitle: `${r.province ?? ''} — ${r.regency ?? ''}`.trim().replace(/^—|—$/, '').trim(),
+          quantity: 1, adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
+        }));
+      }
+
+      json(response, 200, {
+        sourceId,
+        items,
+        total: items.reduce((s, i) => s + (i.adminFee * (i.quantity || 1)), 0),
+        count: items.length,
+      });
+    } catch (error) {
+      json(response, 502, { message: error instanceof Error ? error.message : 'Gagal mengambil detail.' });
+    }
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/dashboard') {
     const [sources, transactions] = await Promise.all([
       getSourcesFromDb(),
