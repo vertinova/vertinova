@@ -132,7 +132,7 @@
   }
 
   .sidebar {
-    @apply sticky top-0 flex h-screen flex-col gap-6 border-r border-[#24352d] bg-[#101a16] p-5 text-white;
+    @apply sticky top-0 flex h-screen flex-col gap-5 overflow-y-auto border-r border-[#24352d] bg-[#101a16] p-5 text-white;
   }
 
   .brand {
@@ -157,31 +157,67 @@
   }
 
   .nav-list {
+    @apply grid gap-5;
+  }
+
+  .nav-group {
     @apply grid gap-1.5;
   }
 
+  .nav-group-label {
+    @apply px-3 text-[11px] font-black uppercase tracking-[.12em] text-white/35;
+  }
+
   .nav-list button {
-    @apply flex min-h-11 items-center gap-3 rounded-lg border-0 bg-transparent px-3 text-left text-sm font-bold text-white/62 transition hover:bg-white/8 hover:text-white;
+    @apply flex min-h-[58px] w-full items-center gap-3 rounded-lg border border-transparent bg-transparent px-3 text-left text-white/68 transition hover:border-white/10 hover:bg-white/8 hover:text-white;
+  }
+
+  .nav-list button > svg {
+    @apply shrink-0;
+  }
+
+  .nav-list button span {
+    @apply grid min-w-0 gap-0.5;
+  }
+
+  .nav-list button strong {
+    @apply text-sm font-black leading-5;
+  }
+
+  .nav-list button small {
+    @apply overflow-hidden text-ellipsis whitespace-nowrap text-xs font-bold leading-5 text-white/42;
   }
 
   .nav-list button.active {
-    @apply bg-white text-[#101a16];
+    @apply border-white bg-white text-[#101a16] shadow-[0_14px_30px_rgba(0,0,0,.22)];
+  }
+
+  .nav-list button.active small {
+    @apply text-[#5b6862];
   }
 
   .sidebar-card {
     @apply mt-auto rounded-lg border border-white/10 bg-white/6 p-4;
   }
 
-  .sidebar-card span {
+  .sidebar-card > span {
     @apply text-xs font-bold uppercase text-white/45;
   }
 
   .sidebar-card strong {
-    @apply mt-2 block text-lg;
+    @apply mt-2 block text-lg leading-tight;
   }
 
-  .sidebar-card p {
-    @apply mt-2 text-sm leading-6 text-white/58;
+  .sidebar-meta {
+    @apply mt-3 grid gap-2;
+  }
+
+  .sidebar-meta span {
+    @apply rounded-lg bg-black/15 px-3 py-2 text-xs font-bold normal-case text-white/66;
+  }
+
+  .sidebar-sync {
+    @apply mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border-0 bg-white px-3 text-sm font-black text-[#101a16] transition hover:bg-[#eaf1ed] disabled:opacity-70;
   }
 
   .content {
@@ -228,6 +264,10 @@
 
   .ghost-button {
     @apply border border-line bg-white px-3 text-ink hover:border-[#a8b5ae];
+  }
+
+  .ghost-button:disabled {
+    @apply cursor-not-allowed opacity-65;
   }
 
   .user-button {
@@ -418,6 +458,79 @@
 
   .empty-transaction-group {
     @apply rounded-lg border border-dashed border-line bg-white p-4 text-center text-sm text-muted;
+  }
+
+  .transactions-page {
+    @apply grid gap-4;
+  }
+
+  .transaction-actions {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .transaction-overview {
+    @apply grid gap-1;
+  }
+
+  .transaction-overview-grid {
+    @apply grid grid-cols-3 gap-3 max-[820px]:grid-cols-1;
+  }
+
+  .transaction-overview-grid div {
+    @apply rounded-lg border border-line bg-[#f8faf9] p-4;
+  }
+
+  .transaction-overview-grid span {
+    @apply block text-sm font-bold text-muted;
+  }
+
+  .transaction-overview-grid strong {
+    @apply mt-2 block text-[clamp(1.25rem,3vw,2rem)] font-black leading-tight;
+  }
+
+  .transaction-detail-grid {
+    @apply grid grid-cols-2 gap-4 max-[1180px]:grid-cols-1;
+  }
+
+  .transaction-detail-panel {
+    @apply grid content-start gap-4 overflow-hidden;
+  }
+
+  .transaction-detail-head {
+    @apply flex items-start justify-between gap-4 max-[620px]:grid max-[620px]:gap-3;
+  }
+
+  .transaction-detail-head > div:first-child {
+    @apply grid gap-1;
+  }
+
+  .transaction-detail-head > div:first-child .source-dot {
+    @apply mb-1;
+  }
+
+  .transaction-detail-head h2 {
+    @apply text-2xl font-black;
+  }
+
+  .transaction-detail-head > div:last-child {
+    @apply text-right max-[620px]:text-left;
+  }
+
+  .transaction-detail-head strong,
+  .transaction-detail-head span {
+    @apply block;
+  }
+
+  .transaction-detail-head span {
+    @apply mt-1 text-sm font-bold text-muted;
+  }
+
+  .detail-table-wrap {
+    @apply max-h-[520px] overflow-auto rounded-lg border border-line;
+  }
+
+  .detail-table-wrap th {
+    @apply sticky top-0 z-[1];
   }
 
   .transaction-row {
@@ -823,6 +936,10 @@
 
   .modal-loading {
     @apply flex flex-col items-center justify-center gap-3 p-16 text-muted;
+  }
+
+  .modal-loading.compact {
+    @apply min-h-56 rounded-lg border border-dashed border-line bg-[#fbfcfb] p-8;
   }
 
   .modal-panel .table-wrap {

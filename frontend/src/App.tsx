@@ -50,7 +50,15 @@ import loginBackground from '../bg-landing-page.jpg';
 import logo from '../logo-vertinova.png';
 
 type SourceId = 'simpaskor' | 'forbasi' | 'desa' | 'sekolah' | 'swasta';
-type ViewId = 'dashboard' | 'sources' | 'integrations' | 'reconciliation' | 'reports';
+type ApiSourceId = Extract<SourceId, 'simpaskor' | 'forbasi'>;
+type ViewId = 'dashboard' | 'sources' | 'integrations' | 'transactions' | 'reports';
+type NavItem = {
+  id: ViewId;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  group: 'Monitor' | 'Operasional';
+};
 
 type RevenueSource = {
   id: SourceId;
@@ -95,6 +103,8 @@ type DetailItem = {
   paidAt: string;
   orderId: string;
 };
+
+type TransactionDetailState = Record<ApiSourceId, { error: string; isLoading: boolean; items: DetailItem[] }>;
 
 type AdminUser = {
   id: number;
@@ -166,13 +176,50 @@ const baseSources: RevenueSource[] = [
   },
 ];
 
-const navItems: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LineChart },
-  { id: 'sources', label: 'Pendapatan', icon: WalletCards },
-  { id: 'integrations', label: 'Integrasi API', icon: PlugZap },
-  { id: 'reconciliation', label: 'Rekonsiliasi', icon: BadgeCheck },
-  { id: 'reports', label: 'Laporan', icon: Download },
+const navItems: NavItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Ringkasan',
+    description: 'Saldo dan kondisi utama',
+    icon: LineChart,
+    group: 'Monitor',
+  },
+  {
+    id: 'sources',
+    label: 'Sumber Dana',
+    description: 'API dan input manual',
+    icon: WalletCards,
+    group: 'Monitor',
+  },
+  {
+    id: 'integrations',
+    label: 'Koneksi API',
+    description: 'Simpaskor dan Forbasi',
+    icon: PlugZap,
+    group: 'Operasional',
+  },
+  {
+    id: 'transactions',
+    label: 'Transaksi',
+    description: 'Detail Simpaskor dan Forbasi',
+    icon: BadgeCheck,
+    group: 'Operasional',
+  },
+  {
+    id: 'reports',
+    label: 'Ekspor Data',
+    description: 'CSV sumber dan transaksi',
+    icon: Download,
+    group: 'Operasional',
+  },
 ];
+
+const navGroups: NavItem['group'][] = ['Monitor', 'Operasional'];
+
+const emptyTransactionDetails: TransactionDetailState = {
+  simpaskor: { error: '', isLoading: false, items: [] },
+  forbasi: { error: '', isLoading: false, items: [] },
+};
 
 const emptyCashflow = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu'].map((month) => ({
   month,
@@ -229,9 +276,7 @@ function App() {
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
   const [notice, setNotice] = useState('Dashboard siap digunakan.');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [detailModal, setDetailModal] = useState<'simpaskor' | 'forbasi' | null>(null);
-  const [detailItems, setDetailItems] = useState<DetailItem[]>([]);
-  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [transactionDetails, setTransactionDetails] = useState<TransactionDetailState>(emptyTransactionDetails);
   const isAdminPath = routePath.startsWith('/admin');
 
   useEffect(() => {
@@ -334,28 +379,50 @@ function App() {
     }
   }, [authedFetch, mergeApiSources]);
 
-  const fetchDetail = useCallback(
-    async (sourceId: 'simpaskor' | 'forbasi') => {
-      setDetailModal(sourceId);
-      setDetailItems([]);
-      setIsLoadingDetail(true);
-      try {
-        const response = await authedFetch(`/api/finance/details/${sourceId}`);
-        if (!response.ok) {
-          const payload = (await response.json().catch(() => ({}))) as { message?: string };
-          throw new Error(payload.message ?? `Gagal mengambil detail ${sourceId}.`);
+  const fetchTransactionDetails = useCallback(async () => {
+    const sourceIds: ApiSourceId[] = ['simpaskor', 'forbasi'];
+
+    setTransactionDetails({
+      simpaskor: { error: '', isLoading: true, items: [] },
+      forbasi: { error: '', isLoading: true, items: [] },
+    });
+
+    const entries = await Promise.all(
+      sourceIds.map(async (sourceId) => {
+        try {
+          const response = await authedFetch(`/api/finance/details/${sourceId}`);
+          const payload = (await response.json().catch(() => ({}))) as { items?: DetailItem[]; message?: string };
+
+          if (!response.ok) {
+            throw new Error(payload.message ?? `Gagal mengambil detail ${sourceId}.`);
+          }
+
+          return [sourceId, { error: '', isLoading: false, items: payload.items ?? [] }] as const;
+        } catch (error) {
+          return [
+            sourceId,
+            {
+              error: error instanceof Error ? error.message : `Gagal mengambil detail ${sourceId}.`,
+              isLoading: false,
+              items: [],
+            },
+          ] as const;
         }
-        const payload = (await response.json()) as { items: DetailItem[] };
-        setDetailItems(payload.items);
-      } catch (error) {
-        setNotice(error instanceof Error ? error.message : `Gagal mengambil detail ${sourceId}.`);
-        setDetailModal(null);
-      } finally {
-        setIsLoadingDetail(false);
-      }
-    },
-    [authedFetch],
-  );
+      }),
+    );
+
+    const nextState = Object.fromEntries(entries) as TransactionDetailState;
+    setTransactionDetails(nextState);
+
+    const failed = Object.values(nextState).filter((state) => state.error).length;
+    setNotice(failed > 0 ? 'Sebagian detail transaksi belum bisa dimuat.' : 'Detail transaksi Simpaskor dan Forbasi berhasil dimuat.');
+  }, [authedFetch]);
+
+  useEffect(() => {
+    if (activeView === 'transactions') {
+      void fetchTransactionDetails();
+    }
+  }, [activeView, fetchTransactionDetails]);
 
   useEffect(() => {
     const boot = async () => {
@@ -487,7 +554,9 @@ function App() {
     setNotice('CSV transaksi dibuat.');
   };
 
-  const activeLabel = navItems.find((item) => item.id === activeView)?.label ?? 'Dashboard';
+  const activeNav = navItems.find((item) => item.id === activeView) ?? navItems[0];
+  const activeLabel = activeNav.label;
+  const activeSubtitle = activeNav.description;
 
   if (!isAdminPath) {
     return <LandingPage />;
@@ -525,25 +594,42 @@ function App() {
         </div>
 
         <nav className="nav-list">
-          {navItems.map(({ id, label, icon: Icon }) => (
-            <button
-              className={activeView === id ? 'active' : ''}
-              key={id}
-              onClick={() => {
-                setActiveView(id);
-                setSidebarOpen(false);
-              }}
-            >
-              <Icon size={18} />
-              <span>{label}</span>
-            </button>
+          {navGroups.map((group) => (
+            <div className="nav-group" key={group}>
+              <span className="nav-group-label">{group}</span>
+              {navItems
+                .filter((item) => item.group === group)
+                .map(({ id, label, description, icon: Icon }) => (
+                  <button
+                    className={activeView === id ? 'active' : ''}
+                    key={id}
+                    onClick={() => {
+                      setActiveView(id);
+                      setSidebarOpen(false);
+                    }}
+                  >
+                    <Icon size={18} />
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{description}</small>
+                    </span>
+                  </button>
+                ))}
+            </div>
           ))}
         </nav>
 
         <div className="sidebar-card">
-          <span>Status sistem</span>
-          <strong>{connectedCount}/2 API sinkron</strong>
-          <p>{syncMessage}</p>
+          <span>Ringkasan cepat</span>
+          <strong>{formatCurrency(totalIncome)}</strong>
+          <div className="sidebar-meta">
+            <span>{connectedCount}/2 API sinkron</span>
+            <span>{verifiedCount}/{transactions.length} transaksi valid</span>
+          </div>
+          <button className="sidebar-sync" disabled={isSyncing} onClick={syncApiSources}>
+            {isSyncing ? <Loader2 size={16} className="spin-icon" /> : <RefreshCcw size={16} />}
+            {isSyncing ? 'Sinkronisasi...' : 'Sinkron sekarang'}
+          </button>
         </div>
       </aside>
 
@@ -552,7 +638,7 @@ function App() {
           <div>
             <p className="eyebrow">Vertinova Finance</p>
             <h1>{activeLabel}</h1>
-            <span className="page-subtitle">Pantau saldo, koneksi API, rekonsiliasi, dan laporan dalam satu ruang kerja.</span>
+            <span className="page-subtitle">{activeSubtitle}. Pantau saldo, koneksi API, rekonsiliasi, dan laporan dalam satu ruang kerja.</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
@@ -606,11 +692,22 @@ function App() {
         ) : null}
 
         {activeView === 'integrations' ? (
-          <IntegrationsView apiSources={apiSources} isSyncing={isSyncing} onSync={syncApiSources} onViewDetail={fetchDetail} />
+          <IntegrationsView
+            apiSources={apiSources}
+            isSyncing={isSyncing}
+            onOpenTransactions={() => setActiveView('transactions')}
+            onSync={syncApiSources}
+          />
         ) : null}
 
-        {activeView === 'reconciliation' ? (
-          <ReconciliationView transactions={filteredTransactions} onExportTransactions={exportTransactions} />
+        {activeView === 'transactions' ? (
+          <TransactionsView
+            detailState={transactionDetails}
+            query={query}
+            transactions={filteredTransactions}
+            onExportTransactions={exportTransactions}
+            onRefreshDetails={fetchTransactionDetails}
+          />
         ) : null}
 
         {activeView === 'reports' ? (
@@ -626,14 +723,6 @@ function App() {
         ) : null}
       </section>
 
-      {detailModal ? (
-        <DetailModal
-          isLoading={isLoadingDetail}
-          items={detailItems}
-          sourceId={detailModal}
-          onClose={() => setDetailModal(null)}
-        />
-      ) : null}
     </main>
   );
 }
@@ -914,13 +1003,13 @@ function SourcesView({
 function IntegrationsView({
   apiSources,
   isSyncing,
+  onOpenTransactions,
   onSync,
-  onViewDetail,
 }: {
   apiSources: RevenueSource[];
   isSyncing: boolean;
+  onOpenTransactions: () => void;
   onSync: () => void;
-  onViewDetail: (sourceId: 'simpaskor' | 'forbasi') => void;
 }) {
   return (
     <section className="integration-grid">
@@ -950,9 +1039,9 @@ function IntegrationsView({
               Sinkron semua API
             </button>
             {source.status === 'Sinkron' ? (
-              <button className="ghost-button" onClick={() => onViewDetail(source.id as 'simpaskor' | 'forbasi')}>
+              <button className="ghost-button" onClick={onOpenTransactions}>
                 <Eye size={17} />
-                Lihat Detail
+                Lihat Transaksi
               </button>
             ) : null}
           </div>
@@ -966,6 +1055,168 @@ function IntegrationsView({
         <EndpointRow icon={ServerCog} title="/api/finance/sync" note="Menarik semua API dan menyimpan transaksi harian." />
       </article>
     </section>
+  );
+}
+
+function TransactionsView({
+  detailState,
+  query,
+  transactions,
+  onExportTransactions,
+  onRefreshDetails,
+}: {
+  detailState: TransactionDetailState;
+  query: string;
+  transactions: Transaction[];
+  onExportTransactions: () => void;
+  onRefreshDetails: () => void;
+}) {
+  const keyword = query.trim().toLowerCase();
+  const sourceConfigs: Array<{ color: string; id: ApiSourceId; title: string }> = [
+    { id: 'simpaskor', title: 'Simpaskor', color: '#16a34a' },
+    { id: 'forbasi', title: 'Forbasi', color: '#2563eb' },
+  ];
+  const filteredDetailState = sourceConfigs.reduce((state, source) => {
+    const current = detailState[source.id];
+    state[source.id] = {
+      ...current,
+      items: keyword
+        ? current.items.filter((item) =>
+            [item.id, item.type, item.title, item.subtitle, item.orderId]
+              .join(' ')
+              .toLowerCase()
+              .includes(keyword),
+          )
+        : current.items,
+    };
+    return state;
+  }, {} as TransactionDetailState);
+  const totalDetailCount = Object.values(filteredDetailState).reduce((sum, state) => sum + state.items.length, 0);
+  const totalDetailAmount = Object.values(filteredDetailState).reduce(
+    (sum, state) => sum + state.items.reduce((subtotal, item) => subtotal + item.adminFee, 0),
+    0,
+  );
+  const isLoading = Object.values(detailState).some((state) => state.isLoading);
+
+  return (
+    <section className="transactions-page">
+      <article className="panel transaction-overview">
+        <PanelTitle
+          eyebrow="Transaksi"
+          title="Detail transaksi Simpaskor dan Forbasi"
+          action={
+            <div className="transaction-actions">
+              <button className="ghost-button" disabled={isLoading} onClick={onRefreshDetails}>
+                {isLoading ? <Loader2 size={17} className="spin-icon" /> : <RefreshCcw size={17} />}
+                Muat ulang
+              </button>
+              <button className="ghost-button" onClick={onExportTransactions}>
+                <Download size={17} />
+                Export
+              </button>
+            </div>
+          }
+        />
+        <div className="transaction-overview-grid">
+          <div>
+            <span>Total detail API</span>
+            <strong>{formatCurrency(totalDetailAmount)}</strong>
+          </div>
+          <div>
+            <span>Baris detail</span>
+            <strong>{totalDetailCount}</strong>
+          </div>
+          <div>
+            <span>Transaksi tersimpan</span>
+            <strong>{transactions.length}</strong>
+          </div>
+        </div>
+      </article>
+
+      <div className="transaction-detail-grid">
+        {sourceConfigs.map((source) => (
+          <TransactionDetailPanel
+            color={source.color}
+            key={source.id}
+            sourceId={source.id}
+            state={filteredDetailState[source.id]}
+            title={source.title}
+          />
+        ))}
+      </div>
+
+      <ReconciliationView compact transactions={transactions} onExportTransactions={onExportTransactions} />
+    </section>
+  );
+}
+
+function TransactionDetailPanel({
+  color,
+  sourceId,
+  state,
+  title,
+}: {
+  color: string;
+  sourceId: ApiSourceId;
+  state: { error: string; isLoading: boolean; items: DetailItem[] };
+  title: string;
+}) {
+  const total = state.items.reduce((sum, item) => sum + item.adminFee, 0);
+
+  return (
+    <article className="panel transaction-detail-panel">
+      <div className="transaction-detail-head">
+        <div>
+          <span className="source-dot" style={{ backgroundColor: color }} />
+          <p className="eyebrow">{sourceId}</p>
+          <h2>{title}</h2>
+        </div>
+        <div>
+          <strong>{formatCurrency(total)}</strong>
+          <span>{state.items.length} transaksi</span>
+        </div>
+      </div>
+
+      {state.isLoading ? (
+        <div className="modal-loading compact">
+          <Loader2 size={24} className="spin-icon" />
+          <span>Memuat detail transaksi...</span>
+        </div>
+      ) : state.error ? (
+        <EmptyState icon={BadgeCheck} title="Detail belum tersedia." note={state.error} />
+      ) : state.items.length === 0 ? (
+        <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Tidak ada data transaksi yang cocok." />
+      ) : (
+        <div className="table-wrap detail-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tipe</th>
+                <th>Nama / Event</th>
+                <th>Qty</th>
+                <th>Admin Fee</th>
+                <th>Tanggal Bayar</th>
+              </tr>
+            </thead>
+            <tbody>
+              {state.items.map((item) => (
+                <tr key={`${sourceId}-${item.id}-${item.orderId}`}>
+                  <td><span className="type-chip">{item.type}</span></td>
+                  <td>
+                    <div className="detail-cell-title">{item.title}</div>
+                    {item.subtitle ? <div className="detail-cell-sub">{item.subtitle}</div> : null}
+                    <div className="detail-order-id">{item.orderId || '-'}</div>
+                  </td>
+                  <td>{item.quantity}</td>
+                  <td>{formatCurrency(item.adminFee)}</td>
+                  <td>{formatDate(item.paidAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -999,8 +1250,8 @@ function ReconciliationView({
   return (
     <section className="panel">
       <PanelTitle
-        eyebrow="Rekonsiliasi"
-        title={compact ? 'Detail transaksi API terbaru' : 'Detail transaksi API'}
+        eyebrow={compact ? 'Transaksi' : 'Rekonsiliasi'}
+        title={compact ? 'Transaksi tersimpan terbaru' : 'Detail transaksi API'}
         action={
           <button className="ghost-button" onClick={onExportTransactions}>
             <Download size={17} />
