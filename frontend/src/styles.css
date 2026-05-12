@@ -668,6 +668,56 @@
   .site-footer a {
     @apply text-white;
   }
+
+  .integration-actions {
+    @apply grid gap-2;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm;
+  }
+
+  .modal-panel {
+    @apply flex max-h-[90vh] w-full max-w-5xl flex-col gap-5 overflow-hidden rounded-xl border border-line bg-white shadow-[0_32px_80px_rgba(0,0,0,.22)];
+  }
+
+  .modal-header {
+    @apply flex items-start justify-between gap-4 border-b border-line px-6 py-5;
+  }
+
+  .modal-header h2 {
+    @apply text-xl font-black;
+  }
+
+  .modal-loading {
+    @apply flex flex-col items-center justify-center gap-3 p-16 text-muted;
+  }
+
+  .modal-panel .table-wrap {
+    @apply flex-1 overflow-auto px-6 pb-6;
+  }
+
+  .modal-panel .empty-state {
+    @apply mx-6 mb-6;
+  }
+
+  .type-chip {
+    @apply inline-block rounded-full bg-[#eef2ef] px-2.5 py-1 text-xs font-black text-[#2f7d55] whitespace-nowrap;
+  }
+
+  .detail-cell-title {
+    @apply text-sm font-bold;
+  }
+
+  .detail-cell-sub {
+    @apply mt-0.5 text-xs text-muted;
+  }
+
+  .detail-order-id {
+    @apply text-xs text-muted;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    overflow-wrap: anywhere;
+  }
 }
 
 @keyframes spin {

@@ -25,6 +25,7 @@ import {
   Code2,
   DatabaseZap,
   Download,
+  Eye,
   Landmark,
   Layers3,
   LineChart,
@@ -82,6 +83,17 @@ type ApiSourcePayload = {
   status: RevenueSource['status'];
   lastSync?: string | null;
   message?: string;
+};
+
+type DetailItem = {
+  id: string;
+  type: string;
+  title: string;
+  subtitle: string;
+  quantity: number;
+  adminFee: number;
+  paidAt: string;
+  orderId: string;
 };
 
 type AdminUser = {
@@ -222,6 +234,9 @@ function App() {
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
   const [notice, setNotice] = useState('Dashboard siap digunakan.');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [detailModal, setDetailModal] = useState<'simpaskor' | 'forbasi' | null>(null);
+  const [detailItems, setDetailItems] = useState<DetailItem[]>([]);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const isAdminPath = routePath.startsWith('/admin');
 
   useEffect(() => {
@@ -323,6 +338,29 @@ function App() {
       setIsSyncing(false);
     }
   }, [authedFetch, mergeApiSources]);
+
+  const fetchDetail = useCallback(
+    async (sourceId: 'simpaskor' | 'forbasi') => {
+      setDetailModal(sourceId);
+      setDetailItems([]);
+      setIsLoadingDetail(true);
+      try {
+        const response = await authedFetch(`/api/finance/details/${sourceId}`);
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as { message?: string };
+          throw new Error(payload.message ?? `Gagal mengambil detail ${sourceId}.`);
+        }
+        const payload = (await response.json()) as { items: DetailItem[] };
+        setDetailItems(payload.items);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : `Gagal mengambil detail ${sourceId}.`);
+        setDetailModal(null);
+      } finally {
+        setIsLoadingDetail(false);
+      }
+    },
+    [authedFetch],
+  );
 
   useEffect(() => {
     const boot = async () => {
@@ -584,7 +622,7 @@ function App() {
         ) : null}
 
         {activeView === 'integrations' ? (
-          <IntegrationsView apiSources={apiSources} isSyncing={isSyncing} onSync={syncApiSources} />
+          <IntegrationsView apiSources={apiSources} isSyncing={isSyncing} onSync={syncApiSources} onViewDetail={fetchDetail} />
         ) : null}
 
         {activeView === 'reconciliation' ? (
@@ -603,6 +641,15 @@ function App() {
           />
         ) : null}
       </section>
+
+      {detailModal ? (
+        <DetailModal
+          isLoading={isLoadingDetail}
+          items={detailItems}
+          sourceId={detailModal}
+          onClose={() => setDetailModal(null)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -777,10 +824,12 @@ function IntegrationsView({
   apiSources,
   isSyncing,
   onSync,
+  onViewDetail,
 }: {
   apiSources: RevenueSource[];
   isSyncing: boolean;
   onSync: () => void;
+  onViewDetail: (sourceId: 'simpaskor' | 'forbasi') => void;
 }) {
   return (
     <section className="integration-grid">
@@ -804,10 +853,18 @@ function IntegrationsView({
               <dd>{formatDate(source.lastSync)}</dd>
             </div>
           </dl>
-          <button className="primary-button" disabled={isSyncing} onClick={onSync}>
-            {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
-            Sinkron semua API
-          </button>
+          <div className="integration-actions">
+            <button className="primary-button" disabled={isSyncing} onClick={onSync}>
+              {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
+              Sinkron semua API
+            </button>
+            {source.status === 'Sinkron' ? (
+              <button className="ghost-button" onClick={() => onViewDetail(source.id as 'simpaskor' | 'forbasi')}>
+                <Eye size={17} />
+                Lihat Detail
+              </button>
+            ) : null}
+          </div>
         </article>
       ))}
 
@@ -1245,6 +1302,85 @@ function ReportLine({ label, value }: { label: string; value: string }) {
     <div>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DetailModal({
+  isLoading,
+  items,
+  sourceId,
+  onClose,
+}: {
+  isLoading: boolean;
+  items: DetailItem[];
+  sourceId: 'simpaskor' | 'forbasi';
+  onClose: () => void;
+}) {
+  const total = items.reduce((sum, item) => sum + item.adminFee * (item.quantity || 1), 0);
+  const title = sourceId === 'simpaskor' ? 'Detail Transaksi Simpaskor' : 'Detail Transaksi Forbasi';
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <p className="eyebrow">Transaksi</p>
+            <h2>{title}</h2>
+          </div>
+          <button className="icon-button" aria-label="Tutup" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="modal-loading">
+            <Loader2 size={28} className="spin-icon" />
+            <span>Memuat detail transaksi...</span>
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Tidak ada data transaksi yang ditemukan." />
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tipe</th>
+                    <th>Nama / Event</th>
+                    <th>Qty</th>
+                    <th>Admin Fee</th>
+                    <th>Tanggal Bayar</th>
+                    <th>Order ID</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <td><span className="type-chip">{item.type}</span></td>
+                      <td>
+                        <div className="detail-cell-title">{item.title}</div>
+                        {item.subtitle ? <div className="detail-cell-sub">{item.subtitle}</div> : null}
+                      </td>
+                      <td>{item.quantity}</td>
+                      <td>{formatCurrency(item.adminFee)}</td>
+                      <td>{formatDate(item.paidAt)}</td>
+                      <td className="detail-order-id">{item.orderId || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={3}>Total ({items.length} transaksi)</td>
+                    <td>{formatCurrency(total)}</td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
