@@ -1,12 +1,15 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { scryptSync, randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 
-const envPath = resolve(process.cwd(), '.env.local');
+const loadEnvFile = (envPath) => {
+  if (!existsSync(envPath)) {
+    return;
+  }
 
-if (existsSync(envPath)) {
   const envFile = readFileSync(envPath, 'utf8');
 
   for (const line of envFile.split(/\r?\n/)) {
@@ -26,10 +29,34 @@ if (existsSync(envPath)) {
     const value = trimmed.slice(separatorIndex + 1).trim().replace(/^["']|["']$/g, '');
     process.env[key] ??= value;
   }
+};
+
+const serverDir = dirname(fileURLToPath(import.meta.url));
+const backendDir = resolve(serverDir, '..');
+const rootDir = resolve(backendDir, '..');
+
+[
+  resolve(rootDir, '.env'),
+  resolve(rootDir, '.env.local'),
+  resolve(backendDir, '.env'),
+  resolve(backendDir, '.env.local'),
+  resolve(process.cwd(), '.env'),
+  resolve(process.cwd(), '.env.local'),
+].forEach(loadEnvFile);
+
+if (!process.env.DATABASE_URL && process.env.DB_NAME) {
+  const user = encodeURIComponent(process.env.DB_USER ?? 'root');
+  const password = process.env.DB_PASSWORD ? `:${encodeURIComponent(process.env.DB_PASSWORD)}` : '';
+  const host = process.env.DB_HOST ?? '127.0.0.1';
+  const dbPort = process.env.DB_PORT ?? '3306';
+  const database = encodeURIComponent(process.env.DB_NAME);
+
+  process.env.DATABASE_URL = `mysql://${user}${password}@${host}:${dbPort}/${database}`;
 }
 
 const port = Number(process.env.FINANCE_API_PORT ?? 8787);
 const apiBaseUrl = process.env.API_BASE_URL ?? 'https://vertinova.id';
+const localApiBaseUrl = `http://127.0.0.1:${port}`;
 const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS ?? 12);
 
 const prisma = new PrismaClient();
@@ -94,7 +121,7 @@ const json = (response, statusCode, payload) => {
   const body = JSON.stringify(payload, (_, v) => (typeof v === 'bigint' ? Number(v) : v));
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
     'X-Content-Type-Options': 'nosniff',
@@ -230,6 +257,60 @@ const logout = async (request) => {
   return { message: 'Logout berhasil.' };
 };
 
+const readNumberEnv = (key, fallback = 0) => {
+  const value = Number(process.env[key] ?? fallback);
+  return Number.isFinite(value) ? value : fallback;
+};
+
+const getConfiguredApiKey = (sourceId) => {
+  if (sourceId === 'simpaskor') return process.env.SIMPASKOR_API_KEY ?? '';
+  if (sourceId === 'forbasi') return process.env.FORBASI_API_KEY ?? '';
+  return '';
+};
+
+const verifyExternalApiKey = (request, sourceId) => {
+  const expectedApiKey = getConfiguredApiKey(sourceId);
+
+  if (!expectedApiKey) {
+    return false;
+  }
+
+  const headerName =
+    sourceId === 'forbasi' ? process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key' : 'X-API-Key';
+  const providedApiKey = request.headers[headerName.toLowerCase()];
+
+  return providedApiKey === expectedApiKey;
+};
+
+const paymentConfigPayload = ({ id, name, adminFee }) => ({
+  source: id,
+  name,
+  amount: adminFee,
+  admin_fee: adminFee,
+  data: {
+    amount: adminFee,
+    payment_config: {
+      admin_fee: adminFee,
+    },
+  },
+});
+
+const normalizeAmount = (value) => {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value
+      .replace(/[^\d,.-]/g, '')
+      .replace(/\.(?=\d{3}(\D|$))/g, '')
+      .replace(',', '.');
+    return Number(normalized);
+  }
+
+  return Number(value);
+};
+
 const extractAmount = (payload) => {
   const candidates = [
     payload?.amount,
@@ -265,10 +346,20 @@ const extractAmount = (payload) => {
   ];
 
   for (const candidate of candidates) {
-    const amount = Number(candidate);
+    const amount = normalizeAmount(candidate);
 
     if (Number.isFinite(amount)) {
       return amount;
+    }
+  }
+
+  const rows = [payload?.data, payload?.result, payload?.items, payload?.transactions].find(Array.isArray);
+
+  if (rows) {
+    const total = rows.reduce((sum, row) => sum + extractAmount(row), 0);
+
+    if (Number.isFinite(total) && total > 0) {
+      return total;
     }
   }
 
@@ -278,6 +369,10 @@ const extractAmount = (payload) => {
 const resolveApiUrl = (url) => {
   if (!url) {
     return '';
+  }
+
+  if (url.startsWith('/api/')) {
+    return new URL(url, localApiBaseUrl).toString();
   }
 
   return new URL(url, apiBaseUrl).toString();
@@ -317,6 +412,7 @@ const getTransactionsFromDb = async () => {
   });
   return rows.map((row) => ({
     id: `VTF-${String(row.id).padStart(5, '0')}`,
+    sourceId: row.sourceId,
     source: row.source.name,
     description: row.description,
     date: row.occurredAt,
@@ -449,7 +545,7 @@ const route = async (request, response) => {
   if (request.method === 'OPTIONS') {
     response.writeHead(204, {
       'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Max-Age': '86400',
     });
@@ -460,6 +556,42 @@ const route = async (request, response) => {
   if (request.url === '/api/finance/health') {
     await prisma.$queryRaw`SELECT 1`;
     json(response, 200, { ok: true });
+    return;
+  }
+
+  if (request.method === 'GET' && request.url === '/api/external/simpaskor/payment-config') {
+    if (!verifyExternalApiKey(request, 'simpaskor')) {
+      json(response, 401, { message: 'API key Simpaskor tidak valid.' });
+      return;
+    }
+
+    json(
+      response,
+      200,
+      paymentConfigPayload({
+        id: 'simpaskor',
+        name: 'Simpaskor',
+        adminFee: readNumberEnv('SIMPASKOR_ADMIN_FEE', 0),
+      }),
+    );
+    return;
+  }
+
+  if (request.method === 'GET' && request.url === '/api/external/kta/payment-config') {
+    if (!verifyExternalApiKey(request, 'forbasi')) {
+      json(response, 401, { message: 'API key Forbasi tidak valid.' });
+      return;
+    }
+
+    json(
+      response,
+      200,
+      paymentConfigPayload({
+        id: 'forbasi',
+        name: 'Forbasi',
+        adminFee: readNumberEnv('FORBASI_ADMIN_FEE', 0),
+      }),
+    );
     return;
   }
 

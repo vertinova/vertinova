@@ -1,39 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import loginBackground from '../bg-landing-page.jpg';
-import logo from '../logo-vertinova.png';
-import {
-  Activity,
-  ArrowRight,
-  ArrowDownRight,
-  ArrowUpRight,
-  BadgeCheck,
-  Banknote,
-  Bell,
-  BrainCircuit,
-  Building2,
-  CalendarDays,
-  Cloud,
-  Code2,
-  DatabaseZap,
-  Download,
-  Globe2,
-  Landmark,
-  Layers3,
-  LineChart,
-  LogOut,
-  Mail,
-  PlugZap,
-  RefreshCcw,
-  Rocket,
-  School,
-  Search,
-  ServerCog,
-  ShieldCheck,
-  Sparkles,
-  UserRound,
-  WalletCards,
-  type LucideIcon,
-} from 'lucide-react';
 import { motion } from 'framer-motion';
 import {
   Area,
@@ -49,8 +14,42 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import {
+  ArrowRight,
+  BadgeCheck,
+  Banknote,
+  Bell,
+  Building2,
+  CheckCircle2,
+  Cloud,
+  Code2,
+  DatabaseZap,
+  Download,
+  Landmark,
+  Layers3,
+  LineChart,
+  Loader2,
+  LockKeyhole,
+  LogOut,
+  Mail,
+  Menu,
+  PlugZap,
+  RefreshCcw,
+  School,
+  Search,
+  ServerCog,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  WalletCards,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
+import loginBackground from '../bg-landing-page.jpg';
+import logo from '../logo-vertinova.png';
 
 type SourceId = 'simpaskor' | 'forbasi' | 'desa' | 'sekolah' | 'swasta';
+type ViewId = 'dashboard' | 'sources' | 'integrations' | 'reconciliation' | 'reports';
 
 type RevenueSource = {
   id: SourceId;
@@ -64,10 +63,12 @@ type RevenueSource = {
   status: 'Sinkron' | 'API Belum Terhubung' | 'Manual';
   description: string;
   lastSync?: string | null;
+  message?: string;
 };
 
 type Transaction = {
   id: string;
+  sourceId: SourceId;
   source: string;
   description: string;
   date: string;
@@ -98,7 +99,7 @@ const baseSources: RevenueSource[] = [
     amount: 0,
     growth: 0,
     target: 0,
-    color: '#23c483',
+    color: '#16a34a',
     icon: PlugZap,
     status: 'API Belum Terhubung',
     description: 'Saldo masuk otomatis dari API Simpaskor.',
@@ -110,7 +111,7 @@ const baseSources: RevenueSource[] = [
     amount: 0,
     growth: 0,
     target: 0,
-    color: '#3b82f6',
+    color: '#2563eb',
     icon: ShieldCheck,
     status: 'API Belum Terhubung',
     description: 'Saldo masuk otomatis dari API Forbasi.',
@@ -122,7 +123,7 @@ const baseSources: RevenueSource[] = [
     amount: 0,
     growth: 0,
     target: 0,
-    color: '#f59e0b',
+    color: '#d97706',
     icon: Landmark,
     status: 'Manual',
     description: 'Pendapatan desa belum diisi manual.',
@@ -134,7 +135,7 @@ const baseSources: RevenueSource[] = [
     amount: 0,
     growth: 0,
     target: 0,
-    color: '#ef5da8',
+    color: '#db2777',
     icon: School,
     status: 'Manual',
     description: 'Pendapatan sekolah belum diisi manual.',
@@ -146,37 +147,32 @@ const baseSources: RevenueSource[] = [
     amount: 0,
     growth: 0,
     target: 0,
-    color: '#8b5cf6',
+    color: '#7c3aed',
     icon: Building2,
     status: 'Manual',
     description: 'Pendapatan swasta belum diisi manual.',
   },
 ];
 
-const emptyCashflow = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'Mei',
-  'Jun',
-  'Jul',
-  'Agu',
-].map((month) => ({ month, income: 0, expense: 0 }));
+const navItems: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LineChart },
+  { id: 'sources', label: 'Pendapatan', icon: WalletCards },
+  { id: 'integrations', label: 'Integrasi API', icon: PlugZap },
+  { id: 'reconciliation', label: 'Rekonsiliasi', icon: BadgeCheck },
+  { id: 'reports', label: 'Laporan', icon: Download },
+];
+
+const emptyCashflow = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu'].map((month) => ({
+  month,
+  income: 0,
+  expense: 0,
+}));
 
 const emptyWeeklyApi = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((day) => ({
   day,
   simpaskor: 0,
   forbasi: 0,
 }));
-
-const navItems: Array<[string, LucideIcon]> = [
-  ['Dashboard', LineChart],
-  ['Pendapatan', WalletCards],
-  ['Integrasi API', PlugZap],
-  ['Rekonsiliasi', BadgeCheck],
-  ['Laporan', Download],
-];
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -185,22 +181,51 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const formatDate = (value?: string | null) => {
+  if (!value) return 'Belum pernah';
+  return new Date(value).toLocaleString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const toMillions = (value: number) => Math.round(value / 1_000_000);
+
+const downloadCsv = (filename: string, rows: Array<Record<string, string | number>>) => {
+  if (rows.length === 0) return;
+
+  const headers = Object.keys(rows[0]);
+  const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
+  const csv = [headers.join(','), ...rows.map((row) => headers.map((header) => escape(row[header])).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
 
 function App() {
   const [routePath, setRoutePath] = useState(() => window.location.pathname);
+  const [activeView, setActiveView] = useState<ViewId>('dashboard');
   const [sources, setSources] = useState(baseSources);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [query, setQuery] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('vertinova_token') ?? '');
   const [user, setUser] = useState<AdminUser | null>(null);
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
+  const [notice, setNotice] = useState('Dashboard siap digunakan.');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isAdminPath = routePath.startsWith('/admin');
 
   useEffect(() => {
     const handleRouteChange = () => setRoutePath(window.location.pathname);
-
     window.addEventListener('popstate', handleRouteChange);
     return () => window.removeEventListener('popstate', handleRouteChange);
   }, []);
@@ -217,6 +242,30 @@ function App() {
     [authToken],
   );
 
+  const mergeApiSources = useCallback((payloadSources: ApiSourcePayload[]) => {
+    const apiById = new Map(payloadSources.map((source) => [source.id, source]));
+
+    setSources((currentSources) =>
+      currentSources.map((source) => {
+        const apiSource = apiById.get(source.id);
+
+        if (!apiSource) {
+          return source.category === 'manual' ? { ...source, amount: 0, growth: 0, target: 0 } : source;
+        }
+
+        return {
+          ...source,
+          amount: apiSource.amount,
+          status: apiSource.status,
+          target: apiSource.amount > 0 ? 100 : 0,
+          growth: 0,
+          lastSync: apiSource.lastSync ?? null,
+          message: apiSource.message,
+        };
+      }),
+    );
+  }, []);
+
   const loadFinanceData = useCallback(async () => {
     try {
       const response = await authedFetch('/api/finance/dashboard');
@@ -232,39 +281,19 @@ function App() {
       const payload = (await response.json()) as {
         sources: ApiSourcePayload[];
         transactions: Transaction[];
-        summary: { totalIncome: number; apiIncome: number };
       };
-      const apiById = new Map(payload.sources.map((source) => [source.id, source]));
 
-      setSources((currentSources) =>
-        currentSources.map((source) => {
-          const apiSource = apiById.get(source.id);
-
-          if (!apiSource) {
-            return source.category === 'manual'
-              ? { ...source, amount: 0, growth: 0, target: 0 }
-              : source;
-          }
-
-          return {
-            ...source,
-            amount: apiSource.amount,
-            status: apiSource.status,
-            target: apiSource.amount > 0 ? 100 : 0,
-            growth: 0,
-            lastSync: apiSource.lastSync ?? null,
-          };
-        }),
-      );
+      mergeApiSources(payload.sources);
       setTransactions(payload.transactions);
-
       setSyncMessage('Data dibaca dari database lokal Vertinova Finance.');
+      setNotice('Data finance berhasil dimuat.');
     } catch (error) {
       setSources(baseSources);
       setTransactions([]);
       setSyncMessage(error instanceof Error ? error.message : 'Gagal mengambil saldo API.');
+      setNotice('Data belum bisa dimuat. Periksa API atau sesi login.');
     }
-  }, [authedFetch]);
+  }, [authedFetch, mergeApiSources]);
 
   const syncApiSources = useCallback(async () => {
     setIsSyncing(true);
@@ -274,43 +303,26 @@ function App() {
       const response = await authedFetch('/api/finance/sync', { method: 'POST' });
 
       if (!response.ok) {
-        throw new Error('API finance proxy tidak merespons dengan benar.');
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message ?? 'API finance proxy tidak merespons dengan benar.');
       }
 
       const payload = (await response.json()) as {
         sources: ApiSourcePayload[];
         transactions: Transaction[];
       };
-      const apiById = new Map(payload.sources.map((source) => [source.id, source]));
 
-      setSources((currentSources) =>
-        currentSources.map((source) => {
-          const apiSource = apiById.get(source.id);
-
-          if (!apiSource) {
-            return source.category === 'manual'
-              ? { ...source, amount: 0, growth: 0, target: 0 }
-              : source;
-          }
-
-          return {
-            ...source,
-            amount: apiSource.amount,
-            status: apiSource.status,
-            target: apiSource.amount > 0 ? 100 : 0,
-            growth: 0,
-            lastSync: apiSource.lastSync ?? null,
-          };
-        }),
-      );
+      mergeApiSources(payload.sources);
       setTransactions(payload.transactions);
       setSyncMessage('Sinkronisasi selesai dan tersimpan ke database lokal.');
+      setNotice('Sinkronisasi API selesai.');
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : 'Gagal mengambil saldo API.');
+      setNotice('Sinkronisasi gagal. Detail muncul di panel status.');
     } finally {
       setIsSyncing(false);
     }
-  }, [authedFetch]);
+  }, [authedFetch, mergeApiSources]);
 
   useEffect(() => {
     const boot = async () => {
@@ -341,22 +353,26 @@ function App() {
     void boot();
   }, [authToken, authedFetch, isAdminPath, loadFinanceData]);
 
-  const handleLogin = useCallback(async (email: string, password: string) => {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const payload = await response.json();
+  const handleLogin = useCallback(
+    async (email: string, password: string) => {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const payload = await response.json();
 
-    if (!response.ok) {
-      throw new Error(payload.message ?? 'Login gagal.');
-    }
+      if (!response.ok) {
+        throw new Error(payload.message ?? 'Login gagal.');
+      }
 
-    localStorage.setItem('vertinova_token', payload.token);
-    setAuthToken(payload.token);
-    setUser(payload.user);
-  }, []);
+      localStorage.setItem('vertinova_token', payload.token);
+      setAuthToken(payload.token);
+      setUser(payload.user);
+      setNotice(`Selamat datang, ${payload.user.name}.`);
+    },
+    [],
+  );
 
   const handleLogout = useCallback(async () => {
     if (authToken) {
@@ -372,43 +388,83 @@ function App() {
     setRoutePath('/admin');
   }, [authToken, authedFetch]);
 
-  const totalIncome = useMemo(
-    () => sources.reduce((sum, source) => sum + source.amount, 0),
-    [sources],
-  );
-  const apiIncome = useMemo(
-    () =>
-      sources
-        .filter((source) => source.category === 'api')
-        .reduce((sum, source) => sum + source.amount, 0),
-    [sources],
-  );
-  const sourceChart = useMemo(
-    () =>
-      sources.map((source) => ({
-        name: source.name,
-        value: source.amount,
-        color: source.color,
-      })),
-    [sources],
-  );
-  const currentCashflow = useMemo(
-    () =>
-      emptyCashflow.map((row, index) =>
-        index === emptyCashflow.length - 1 ? { ...row, income: toMillions(totalIncome) } : row,
-      ),
-    [totalIncome],
-  );
-  const currentWeeklyApi = useMemo(() => {
-    const simpaskor = sources.find((source) => source.id === 'simpaskor')?.amount ?? 0;
-    const forbasi = sources.find((source) => source.id === 'forbasi')?.amount ?? 0;
-
-    return emptyWeeklyApi.map((row, index) =>
-      index === emptyWeeklyApi.length - 1
-        ? { ...row, simpaskor: toMillions(simpaskor), forbasi: toMillions(forbasi) }
-        : row,
+  const filteredSources = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return sources;
+    return sources.filter((source) =>
+      [source.name, source.status, source.description, source.message ?? ''].join(' ').toLowerCase().includes(keyword),
     );
-  }, [sources]);
+  }, [query, sources]);
+
+  const filteredTransactions = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    if (!keyword) return transactions;
+    return transactions.filter((transaction) =>
+      [transaction.id, transaction.sourceId, transaction.source, transaction.description, transaction.status]
+        .join(' ')
+        .toLowerCase()
+        .includes(keyword),
+    );
+  }, [query, transactions]);
+
+  const totalIncome = useMemo(() => sources.reduce((sum, source) => sum + source.amount, 0), [sources]);
+  const apiIncome = useMemo(
+    () => sources.filter((source) => source.category === 'api').reduce((sum, source) => sum + source.amount, 0),
+    [sources],
+  );
+  const manualIncome = totalIncome - apiIncome;
+  const verifiedCount = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
+  const connectedCount = sources.filter((source) => source.status === 'Sinkron').length;
+  const apiSources = sources.filter((source) => source.category === 'api');
+  const sourceChart = sources.map((source) => ({ name: source.name, value: source.amount, color: source.color }));
+  const currentCashflow = emptyCashflow.map((row, index) =>
+    index === emptyCashflow.length - 1 ? { ...row, income: toMillions(totalIncome) } : row,
+  );
+  const currentWeeklyApi = emptyWeeklyApi.map((row, index) =>
+    index === emptyWeeklyApi.length - 1
+      ? {
+          ...row,
+          simpaskor: toMillions(sources.find((source) => source.id === 'simpaskor')?.amount ?? 0),
+          forbasi: toMillions(sources.find((source) => source.id === 'forbasi')?.amount ?? 0),
+        }
+      : row,
+  );
+
+  const exportSources = () => {
+    downloadCsv(
+      `vertinova-sumber-pendapatan-${new Date().toISOString().slice(0, 10)}.csv`,
+      sources.map((source) => ({
+        sumber: source.name,
+        kategori: source.category,
+        status: source.status,
+        saldo: source.amount,
+        terakhir_sinkron: formatDate(source.lastSync),
+      })),
+    );
+    setNotice('CSV sumber pendapatan dibuat.');
+  };
+
+  const exportTransactions = () => {
+    if (transactions.length === 0) {
+      setNotice('Belum ada transaksi untuk diexport.');
+      return;
+    }
+
+    downloadCsv(
+      `vertinova-transaksi-${new Date().toISOString().slice(0, 10)}.csv`,
+      transactions.map((transaction) => ({
+        id: transaction.id,
+        sumber: transaction.source,
+        deskripsi: transaction.description,
+        tanggal: new Date(transaction.date).toLocaleString('id-ID'),
+        nominal: transaction.amount,
+        status: transaction.status,
+      })),
+    );
+    setNotice('CSV transaksi dibuat.');
+  };
+
+  const activeLabel = navItems.find((item) => item.id === activeView)?.label ?? 'Dashboard';
 
   if (!isAdminPath) {
     return <LandingPage />;
@@ -429,51 +485,70 @@ function App() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="Navigasi utama">
+      <button className="mobile-menu" aria-label="Buka menu" onClick={() => setSidebarOpen(true)}>
+        <Menu size={20} />
+      </button>
+
+      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`} aria-label="Navigasi utama">
         <div className="brand">
           <img className="brand-logo" src={logo} alt="Vertinova" />
           <div>
             <strong>Vertinova</strong>
-            <span>Finance OS</span>
+            <span>Finance Control</span>
           </div>
+          <button className="close-sidebar" aria-label="Tutup menu" onClick={() => setSidebarOpen(false)}>
+            <X size={18} />
+          </button>
         </div>
 
         <nav className="nav-list">
-          {navItems.map(([label, Icon]) => (
-            <button className={label === 'Dashboard' ? 'active' : ''} key={label}>
+          {navItems.map(({ id, label, icon: Icon }) => (
+            <button
+              className={activeView === id ? 'active' : ''}
+              key={id}
+              onClick={() => {
+                setActiveView(id);
+                setSidebarOpen(false);
+              }}
+            >
               <Icon size={18} />
               <span>{label}</span>
             </button>
           ))}
         </nav>
 
-        <div className="sync-panel">
-          <Sparkles size={20} />
-          <strong>{user.name}</strong>
-          <span>{user.role === 'super_admin' ? 'Super Admin' : 'Admin'} aktif di sesi ini.</span>
+        <div className="sidebar-card">
+          <span>Status sistem</span>
+          <strong>{connectedCount}/2 API sinkron</strong>
+          <p>{syncMessage}</p>
         </div>
       </aside>
 
       <section className="content">
         <header className="topbar">
           <div>
-            <p className="eyebrow">Management Keuangan Vertinova</p>
-            <h1>Kontrol pendapatan lintas unit dalam satu dashboard.</h1>
+            <p className="eyebrow">Vertinova Finance</p>
+            <h1>{activeLabel}</h1>
+            <span className="page-subtitle">Pantau saldo, koneksi API, rekonsiliasi, dan laporan dalam satu ruang kerja.</span>
           </div>
           <div className="topbar-actions">
             <label className="search-box">
               <Search size={18} />
-              <input placeholder="Cari transaksi, sumber, invoice" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Cari sumber, transaksi, status"
+              />
             </label>
-            <button className="icon-button" aria-label="Notifikasi">
+            <button className="icon-button" aria-label={notice} title={notice} onClick={() => setNotice(syncMessage)}>
               <Bell size={20} />
             </button>
-            <button className="ghost-button user-button">
+            <button className="ghost-button user-button" title={user.email}>
               <UserRound size={17} />
               {user.name}
             </button>
             <button className="primary-button" disabled={isSyncing} onClick={syncApiSources}>
-              <RefreshCcw size={18} className={isSyncing ? 'spin-icon' : ''} />
+              {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
               {isSyncing ? 'Sinkron...' : 'Sinkron API'}
             </button>
             <button className="icon-button" aria-label="Logout" onClick={handleLogout}>
@@ -482,616 +557,420 @@ function App() {
           </div>
         </header>
 
-        <section className="hero-grid">
-          <motion.div
-            className="finance-hero"
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-          >
-            <div className="hero-copy">
-              <span className="status-pill">
-                <Activity size={16} />
-                Data real API-first
-              </span>
-              <h2>{formatCurrency(totalIncome)}</h2>
-              <p>{syncMessage}</p>
-            </div>
-            <div className="orbital">
-              <div className="orbit orbit-one" />
-              <div className="orbit orbit-two" />
-              <div className="core">
-                <Banknote size={34} />
-                <span>{formatCurrency(apiIncome)}</span>
-              </div>
-            </div>
-          </motion.div>
-
-          <div className="metric-stack">
-            <MetricCard title="API Income" value={formatCurrency(apiIncome)} note="Simpaskor + Forbasi" trend="Real" />
-            <MetricCard title="Rasio Verifikasi" value={`0/${transactions.length}`} note="Belum ada transaksi manual" trend="Aktif" />
-          </div>
+        <section className="notice-bar">
+          <CheckCircle2 size={18} />
+          <span>{notice}</span>
         </section>
 
-        <section className="source-grid">
-          {sources.map((source, index) => (
-            <motion.article
-              className="source-card"
-              key={source.id}
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.06, duration: 0.45 }}
-            >
-              <div className="source-header">
-                <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
-                  <source.icon size={20} />
-                </div>
-                <span className={`source-status ${source.status === 'Sinkron' ? 'sinkron' : source.status === 'Manual' ? 'manual' : 'error'}`}>{source.status}</span>
-              </div>
-              <h3>{source.name}</h3>
-              <strong>{formatCurrency(source.amount)}</strong>
-              <p>{source.description}</p>
-              {source.lastSync ? (
-                <span className="block text-xs text-muted/60 -mt-1">
-                  Sinkron: {new Date(source.lastSync).toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </span>
-              ) : null}
-              <div className="progress-track">
-                <span style={{ width: `${source.target}%`, backgroundColor: source.color }} />
-              </div>
-              <div className="source-footer">
-                <span>Data real {source.target}%</span>
-                <b>{source.growth}%</b>
-              </div>
-            </motion.article>
-          ))}
-        </section>
+        {activeView === 'dashboard' ? (
+          <DashboardView
+            apiIncome={apiIncome}
+            currentCashflow={currentCashflow}
+            currentWeeklyApi={currentWeeklyApi}
+            filteredTransactions={filteredTransactions}
+            manualIncome={manualIncome}
+            sources={filteredSources}
+            sourceChart={sourceChart}
+            syncMessage={syncMessage}
+            totalIncome={totalIncome}
+            transactions={transactions}
+            verifiedCount={verifiedCount}
+            onExportTransactions={exportTransactions}
+          />
+        ) : null}
 
-        <section className="analytics-grid">
-          <article className="panel wide">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">Cashflow</p>
-                <h2>Tren pemasukan dan pengeluaran</h2>
-              </div>
-              <button className="ghost-button">
-                <CalendarDays size={17} />
-                8 Bulan
-              </button>
-            </div>
-            <div className="chart-area">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={currentCashflow}>
-                  <defs>
-                    <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#23c483" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#23c483" stopOpacity={0.03} />
-                    </linearGradient>
-                    <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef5da8" stopOpacity={0.28} />
-                      <stop offset="95%" stopColor="#ef5da8" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#dfe8e4" />
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
-                  <Tooltip formatter={(value) => `${value} juta`} />
-                  <Area type="monotone" dataKey="income" stroke="#159463" strokeWidth={3} fill="url(#incomeGradient)" />
-                  <Area type="monotone" dataKey="expense" stroke="#ef5da8" strokeWidth={2} fill="url(#expenseGradient)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </article>
+        {activeView === 'sources' ? (
+          <SourcesView sources={filteredSources} totalIncome={totalIncome} onExportSources={exportSources} />
+        ) : null}
 
-          <article className="panel">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">Komposisi</p>
-                <h2>Sumber pendapatan</h2>
-              </div>
-            </div>
-            <div className="donut-wrap">
-              <ResponsiveContainer width="100%" height={230}>
-                <PieChart>
-                  <Pie data={sourceChart} innerRadius={58} outerRadius={88} paddingAngle={5} dataKey="value">
-                    {sourceChart.map((entry) => (
-                      <Cell key={entry.name} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="legend-list">
-              {sourceChart.map((item) => (
-                <span key={item.name}>
-                  <i style={{ backgroundColor: item.color }} />
-                  {item.name}
-                </span>
-              ))}
-            </div>
-          </article>
+        {activeView === 'integrations' ? (
+          <IntegrationsView apiSources={apiSources} isSyncing={isSyncing} onSync={syncApiSources} />
+        ) : null}
 
-          <article className="panel">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">Saldo API</p>
-                <h2>Simpaskor vs Forbasi</h2>
-              </div>
-            </div>
-            <div className="chart-area small">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={currentWeeklyApi}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#dfe8e4" />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
-                  <Tooltip formatter={(value) => `${value} juta`} />
-                  <Bar dataKey="simpaskor" fill="#23c483" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="forbasi" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </article>
-        </section>
+        {activeView === 'reconciliation' ? (
+          <ReconciliationView transactions={filteredTransactions} onExportTransactions={exportTransactions} />
+        ) : null}
 
-        <section className="bottom-grid">
-          <article className="panel transactions-panel">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">Rekonsiliasi</p>
-                <h2>Transaksi terbaru</h2>
-              </div>
-              <button className="ghost-button">
-                <Download size={17} />
-                Export
-              </button>
-            </div>
-            {transactions.length > 0 ? (
-              <div className="transaction-list">
-                {transactions.map((transaction) => (
-                  <div className="transaction-row" key={transaction.id}>
-                    <div>
-                      <strong>{transaction.source}</strong>
-                      <span>{transaction.description}</span>
-                    </div>
-                    <div>
-                      <b>{formatCurrency(transaction.amount)}</b>
-                      <span>{new Date(transaction.date).toLocaleString('id-ID')}</span>
-                    </div>
-                    <span className={`transaction-status ${transaction.status.toLowerCase()}`}>
-                      {transaction.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="empty-state">
-                <BadgeCheck size={22} />
-                <strong>Belum ada transaksi real yang tersinkron.</strong>
-                <span>Data transaksi akan muncul setelah API Simpaskor atau Forbasi mengirim saldo masuk.</span>
-              </div>
-            )}
-          </article>
-
-          <article className="panel integration-panel">
-            <div className="panel-title">
-              <div>
-                <p className="eyebrow">API Ready</p>
-                <h2>Konektor saldo masuk</h2>
-              </div>
-            </div>
-            <div className="endpoint-card">
-              <Layers3 size={22} />
-              <div>
-                <strong>/api/finance/simpaskor/balance</strong>
-                <span>Proxy server memakai header X-API-Key dari environment.</span>
-              </div>
-            </div>
-            <div className="endpoint-card blue">
-              <PlugZap size={22} />
-              <div>
-                <strong>/api/finance/forbasi/balance</strong>
-                <span>Siap disambungkan setelah URL dan credential Forbasi tersedia.</span>
-              </div>
-            </div>
-            <div className="ai-note">
-              <ArrowUpRight size={18} />
-              <span>Semua sumber non-API tetap 0 sampai ada input atau endpoint resmi.</span>
-            </div>
-          </article>
-        </section>
+        {activeView === 'reports' ? (
+          <ReportsView
+            apiIncome={apiIncome}
+            manualIncome={manualIncome}
+            sources={sources}
+            totalIncome={totalIncome}
+            transactions={transactions}
+            onExportSources={exportSources}
+            onExportTransactions={exportTransactions}
+          />
+        ) : null}
       </section>
     </main>
   );
 }
 
-function LandingPage() {
-  const capabilities = [
+function DashboardView({
+  apiIncome,
+  currentCashflow,
+  currentWeeklyApi,
+  filteredTransactions,
+  manualIncome,
+  sources,
+  sourceChart,
+  syncMessage,
+  totalIncome,
+  transactions,
+  verifiedCount,
+  onExportTransactions,
+}: {
+  apiIncome: number;
+  currentCashflow: Array<{ month: string; income: number; expense: number }>;
+  currentWeeklyApi: Array<{ day: string; simpaskor: number; forbasi: number }>;
+  filteredTransactions: Transaction[];
+  manualIncome: number;
+  sources: RevenueSource[];
+  sourceChart: Array<{ name: string; value: number; color: string }>;
+  syncMessage: string;
+  totalIncome: number;
+  transactions: Transaction[];
+  verifiedCount: number;
+  onExportTransactions: () => void;
+}) {
+  return (
+    <>
+      <section className="summary-grid">
+        <MetricCard icon={Banknote} label="Total saldo" value={formatCurrency(totalIncome)} note={syncMessage} tone="dark" />
+        <MetricCard icon={PlugZap} label="Saldo API" value={formatCurrency(apiIncome)} note="Simpaskor + Forbasi" />
+        <MetricCard icon={Landmark} label="Manual" value={formatCurrency(manualIncome)} note="Desa, Sekolah, Swasta" />
+        <MetricCard icon={BadgeCheck} label="Terverifikasi" value={`${verifiedCount}/${transactions.length}`} note="Transaksi terbaru" />
+      </section>
+
+      <section className="source-grid">
+        {sources.map((source, index) => (
+          <SourceCard key={source.id} source={source} index={index} />
+        ))}
+      </section>
+
+      <section className="analytics-grid">
+        <article className="panel wide">
+          <PanelTitle eyebrow="Cashflow" title="Tren pemasukan" action={<span className="soft-chip">8 bulan</span>} />
+          <div className="chart-area">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={currentCashflow}>
+                <defs>
+                  <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
+                <Tooltip formatter={(value) => `${value} juta`} />
+                <Area type="monotone" dataKey="income" stroke="#15803d" strokeWidth={3} fill="url(#incomeGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+
+        <article className="panel">
+          <PanelTitle eyebrow="Komposisi" title="Sumber pendapatan" />
+          <div className="donut-wrap">
+            <ResponsiveContainer width="100%" height={230}>
+              <PieChart>
+                <Pie data={sourceChart} innerRadius={58} outerRadius={88} paddingAngle={5} dataKey="value">
+                  {sourceChart.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <LegendList items={sourceChart} />
+        </article>
+
+        <article className="panel">
+          <PanelTitle eyebrow="Saldo API" title="Simpaskor vs Forbasi" />
+          <div className="chart-area small">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={currentWeeklyApi}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="day" axisLine={false} tickLine={false} />
+                <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
+                <Tooltip formatter={(value) => `${value} juta`} />
+                <Bar dataKey="simpaskor" fill="#16a34a" radius={[7, 7, 0, 0]} />
+                <Bar dataKey="forbasi" fill="#2563eb" radius={[7, 7, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </article>
+      </section>
+
+      <ReconciliationView compact transactions={filteredTransactions.slice(0, 6)} onExportTransactions={onExportTransactions} />
+    </>
+  );
+}
+
+function SourcesView({
+  sources,
+  totalIncome,
+  onExportSources,
+}: {
+  sources: RevenueSource[];
+  totalIncome: number;
+  onExportSources: () => void;
+}) {
+  return (
+    <section className="panel">
+      <PanelTitle
+        eyebrow="Pendapatan"
+        title="Daftar sumber dana"
+        action={
+          <button className="ghost-button" onClick={onExportSources}>
+            <Download size={17} />
+            Export CSV
+          </button>
+        }
+      />
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Sumber</th>
+              <th>Kategori</th>
+              <th>Status</th>
+              <th>Saldo</th>
+              <th>Terakhir sinkron</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sources.map((source) => (
+              <tr key={source.id}>
+                <td>
+                  <span className="table-source">
+                    <source.icon size={18} style={{ color: source.color }} />
+                    {source.name}
+                  </span>
+                </td>
+                <td>{source.category === 'api' ? 'API' : 'Manual'}</td>
+                <td>
+                  <StatusPill status={source.status} />
+                </td>
+                <td>{formatCurrency(source.amount)}</td>
+                <td>{formatDate(source.lastSync)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={3}>Total</td>
+              <td>{formatCurrency(totalIncome)}</td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function IntegrationsView({
+  apiSources,
+  isSyncing,
+  onSync,
+}: {
+  apiSources: RevenueSource[];
+  isSyncing: boolean;
+  onSync: () => void;
+}) {
+  return (
+    <section className="integration-grid">
+      {apiSources.map((source) => (
+        <article className="panel integration-card" key={source.id}>
+          <div className="source-header">
+            <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
+              <source.icon size={22} />
+            </div>
+            <StatusPill status={source.status} />
+          </div>
+          <h2>{source.name}</h2>
+          <p>{source.message ?? source.description}</p>
+          <dl>
+            <div>
+              <dt>Saldo</dt>
+              <dd>{formatCurrency(source.amount)}</dd>
+            </div>
+            <div>
+              <dt>Terakhir sinkron</dt>
+              <dd>{formatDate(source.lastSync)}</dd>
+            </div>
+          </dl>
+          <button className="primary-button" disabled={isSyncing} onClick={onSync}>
+            {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
+            Sinkron semua API
+          </button>
+        </article>
+      ))}
+
+      <article className="panel endpoint-panel">
+        <PanelTitle eyebrow="Endpoint" title="Konektor server" />
+        <EndpointRow icon={Layers3} title="/api/finance/simpaskor/balance" note="Mengambil saldo Simpaskor dengan header X-API-Key." />
+        <EndpointRow icon={PlugZap} title="/api/finance/forbasi/balance" note="Mengambil saldo Forbasi dengan header X-API-Key." />
+        <EndpointRow icon={ServerCog} title="/api/finance/sync" note="Menarik semua API dan menyimpan transaksi harian." />
+      </article>
+    </section>
+  );
+}
+
+function ReconciliationView({
+  compact = false,
+  transactions,
+  onExportTransactions,
+}: {
+  compact?: boolean;
+  transactions: Transaction[];
+  onExportTransactions: () => void;
+}) {
+  const apiTransactionGroups = [
     {
-      title: 'Software Development',
-      description: 'Aplikasi web, mobile, dashboard, dan sistem operasional yang dibuat sesuai alur bisnis.',
-      icon: Code2,
+      id: 'simpaskor' as const,
+      title: 'Simpaskor',
+      color: '#16a34a',
+      transactions: transactions.filter((transaction) => transaction.sourceId === 'simpaskor'),
     },
     {
-      title: 'Cloud & Infrastructure',
-      description: 'Deployment, server hardening, automation, monitoring, dan arsitektur yang siap tumbuh.',
-      icon: Cloud,
-    },
-    {
-      title: 'Data & AI Automation',
-      description: 'Integrasi data, otomasi proses, AI assistant, dan pipeline kerja yang lebih cepat.',
-      icon: BrainCircuit,
-    },
-    {
-      title: 'API Integration',
-      description: 'Koneksi sistem antar platform, webhook, payment, dan layanan pihak ketiga.',
-      icon: DatabaseZap,
+      id: 'forbasi' as const,
+      title: 'Forbasi',
+      color: '#2563eb',
+      transactions: transactions.filter((transaction) => transaction.sourceId === 'forbasi'),
     },
   ];
-
-  const stats = [
-    { value: '50+', label: 'Proyek Selesai' },
-    { value: '30+', label: 'Klien Aktif' },
-    { value: '99%', label: 'Uptime SLA' },
-    { value: '5 Thn', label: 'Pengalaman' },
-  ];
-
-  const projects = [
-    { tag: 'Dashboard & Analitik', bg: 'from-emerald-900 to-emerald-700',   accent: '#b9ffdc', dots: ['#23c483','#10b981','#34d399'] },
-    { tag: 'Gov-Tech',             bg: 'from-blue-900 to-blue-700',         accent: '#93c5fd', dots: ['#3b82f6','#60a5fa','#1d4ed8'] },
-    { tag: 'Fintech',              bg: 'from-amber-800 to-amber-600',       accent: '#fde68a', dots: ['#f59e0b','#fbbf24','#d97706'] },
-    { tag: 'EdTech',               bg: 'from-pink-900 to-rose-700',         accent: '#fbcfe8', dots: ['#ef5da8','#f472b6','#be185d'] },
-    { tag: 'Gov-Tech',             bg: 'from-violet-900 to-violet-700',     accent: '#ddd6fe', dots: ['#8b5cf6','#a78bfa','#6d28d9'] },
-    { tag: 'Data & AI',            bg: 'from-sky-900 to-cyan-700',          accent: '#bae6fd', dots: ['#0ea5e9','#38bdf8','#0369a1'] },
-  ];
-
-  const process = [
-    { label: 'Discovery', desc: 'Memahami kebutuhan, alur kerja, dan batasan sistem.' },
-    { label: 'Prototype', desc: 'Wireframe dan desain interaktif untuk validasi awal.' },
-    { label: 'Build', desc: 'Pengembangan dengan sprint mingguan dan review rutin.' },
-    { label: 'Launch', desc: 'Deployment, testing, dan serah terima ke tim klien.' },
-    { label: 'Scale', desc: 'Monitoring, update fitur, dan pertumbuhan sistem.' },
-  ];
-
-  const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const otherTransactions = transactions.filter(
+    (transaction) => transaction.sourceId !== 'simpaskor' && transaction.sourceId !== 'forbasi',
+  );
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#071914] text-white">
-
-      {/* ── HERO ─────────────────────────────────────────────────── */}
-      <section className="relative min-h-screen">
-        <img className="absolute inset-0 h-full w-full object-cover opacity-60" src={loginBackground} alt="" />
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(7,25,20,.60)_0%,rgba(7,25,20,.35)_50%,rgba(7,25,20,.55)_100%)]" />
-
-        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <div className="flex items-center gap-3">
-            <img className="h-11 w-11 rounded-xl bg-white object-contain p-1" src={logo} alt="Vertinova" />
-            <div>
-              <strong className="block text-lg">Vertinova</strong>
-              <span className="text-xs uppercase tracking-[.24em] text-emerald-100/70">Technology Partner</span>
-            </div>
+    <section className="panel">
+      <PanelTitle
+        eyebrow="Rekonsiliasi"
+        title={compact ? 'Detail transaksi API terbaru' : 'Detail transaksi API'}
+        action={
+          <button className="ghost-button" onClick={onExportTransactions}>
+            <Download size={17} />
+            Export
+          </button>
+        }
+      />
+      {transactions.length > 0 ? (
+        <>
+          <div className="transaction-split">
+            {apiTransactionGroups.map((group) => (
+              <TransactionGroup
+                color={group.color}
+                key={group.id}
+                title={group.title}
+                transactions={group.transactions}
+              />
+            ))}
           </div>
-          <nav className="hidden items-center gap-6 sm:flex">
-            <button onClick={() => scrollTo('capabilities')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
-              Kapabilitas
-            </button>
-            <button onClick={() => scrollTo('projects')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
-              Proyek
-            </button>
-            <button onClick={() => scrollTo('process')} className="text-sm text-white/70 transition hover:text-white bg-transparent border-none">
-              Cara Kerja
-            </button>
-            <a
-              className="rounded-full border border-white/20 px-4 py-2 text-sm font-bold text-white/80 transition hover:bg-white hover:text-[#071914]"
-              href="mailto:hello@vertinova.id"
-            >
-              Hubungi Kami
-            </a>
-            <a
-              className="rounded-full bg-[#b9ffdc] px-4 py-2 text-sm font-black text-[#071914] transition hover:bg-white"
-              href="/admin"
-            >
-              Masuk
-            </a>
-          </nav>
-        </header>
+          {otherTransactions.length > 0 ? (
+            <TransactionGroup color="#d97706" title="Transaksi lainnya" transactions={otherTransactions} />
+          ) : null}
+        </>
+      ) : (
+        <EmptyState
+          icon={BadgeCheck}
+          title="Belum ada transaksi real yang tersinkron."
+          note="Data transaksi akan muncul setelah API Simpaskor atau Forbasi mengirim saldo masuk."
+        />
+      )}
+    </section>
+  );
+}
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl items-center gap-10 px-5 pb-14 pt-8 sm:px-8 lg:grid-cols-[minmax(0,1fr)_420px]">
-          <motion.div
-            initial={{ opacity: 0, y: 26 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="max-w-4xl"
-          >
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-white/10 px-4 py-2 text-sm font-bold text-emerald-100 backdrop-blur">
-              <Sparkles size={16} />
-              Digital product studio for ambitious teams
-            </span>
-            <h1 className="mt-6 max-w-5xl text-[clamp(3rem,8vw,7.2rem)] font-black leading-[.88] tracking-normal text-white">
-              Teknologi yang membuat bisnis bergerak lebih cepat.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/70">
-              Vertinova membantu perusahaan merancang, membangun, dan menjalankan sistem digital modern:
-              dari aplikasi, integrasi API, otomasi, sampai infrastruktur cloud yang stabil.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-6 font-black text-[#071914] shadow-[0_24px_60px_rgba(35,196,131,.25)] transition hover:-translate-y-0.5"
-                href="mailto:hello@vertinova.id?subject=Konsultasi%20Project%20Vertinova"
-              >
-                Konsultasi Project
-                <ArrowRight size={18} />
-              </a>
-              <button
-                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 font-bold text-white backdrop-blur transition hover:bg-white hover:text-[#071914]"
-                onClick={() => scrollTo('capabilities')}
-              >
-                Lihat Kapabilitas
-              </button>
-            </div>
-          </motion.div>
+function TransactionGroup({
+  color,
+  title,
+  transactions,
+}: {
+  color: string;
+  title: string;
+  transactions: Transaction[];
+}) {
+  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
 
-          <motion.div
-            initial={{ opacity: 0, x: 26 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.65, delay: 0.1 }}
-            className="rounded-2xl border border-white/15 bg-white/10 p-5 shadow-[0_28px_90px_rgba(0,0,0,.28)] backdrop-blur-xl"
-          >
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <div>
-                <p className="text-xs font-black uppercase text-emerald-100/70">Delivery System</p>
-                <h2 className="mt-1 text-2xl font-black">From idea to launch</h2>
-              </div>
-              <Rocket className="text-[#b9ffdc]" size={28} />
-            </div>
-            <div className="mt-5 grid gap-3">
-              {process.map((item, index) => (
-                <div className="flex items-center gap-3 rounded-xl bg-white/10 p-3" key={item.label}>
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#b9ffdc] font-black text-[#071914]">
-                    {index + 1}
-                  </span>
-                  <div>
-                    <p className="font-bold text-white/90 leading-tight">{item.label}</p>
-                    <p className="text-xs text-white/50 mt-0.5">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+  return (
+    <div className="transaction-group">
+      <div className="transaction-group-header">
+        <div>
+          <span className="source-dot" style={{ backgroundColor: color }} />
+          <strong>{title}</strong>
         </div>
-      </section>
-
-      {/* ── STATS ────────────────────────────────────────────────── */}
-      <section className="border-y border-white/10 bg-white/5 px-5 py-10 sm:px-8">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 md:grid-cols-4">
-          {stats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              className="text-center"
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: index * 0.08 }}
-            >
-              <p className="text-[clamp(2.4rem,5vw,3.6rem)] font-black text-[#b9ffdc]">{stat.value}</p>
-              <p className="mt-1 text-sm text-white/60">{stat.label}</p>
-            </motion.div>
+        <span>
+          {transactions.length} transaksi - {formatCurrency(total)}
+        </span>
+      </div>
+      {transactions.length > 0 ? (
+        <div className="transaction-list">
+          {transactions.map((transaction) => (
+            <TransactionRow key={transaction.id} transaction={transaction} showSource={false} />
           ))}
         </div>
-      </section>
+      ) : (
+        <div className="empty-transaction-group">Belum ada transaksi.</div>
+      )}
+    </div>
+  );
+}
 
-      {/* ── CAPABILITIES ─────────────────────────────────────────── */}
-      <section id="capabilities" className="bg-[#f4f7f2] px-5 py-20 text-[#10231f] sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
-            <div>
-              <p className="text-xs font-black uppercase text-[#377463]">Kapabilitas</p>
-              <h2 className="mt-2 max-w-3xl text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
-                Sistem digital yang dirancang untuk kerja nyata.
-              </h2>
-            </div>
-            <p className="max-w-md leading-7 text-[#65766f]">
-              Kami fokus pada solusi yang bisa dipakai tim, mudah dirawat, dan punya ruang untuk berkembang
-              saat bisnis bertambah besar.
-            </p>
-          </div>
-          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {capabilities.map((capability, index) => (
-              <motion.article
-                className="rounded-2xl border border-[#dbe6df] bg-white p-6 shadow-[0_22px_60px_rgba(45,65,57,.09)]"
-                key={capability.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.08 }}
-              >
-                <div className="grid h-12 w-12 place-items-center rounded-xl bg-[#e6f9ef] text-[#0e6d49]">
-                  <capability.icon size={23} />
-                </div>
-                <h3 className="mt-5 text-xl font-black">{capability.title}</h3>
-                <p className="mt-3 leading-7 text-[#65766f]">{capability.description}</p>
-              </motion.article>
-            ))}
-          </div>
+function ReportsView({
+  apiIncome,
+  manualIncome,
+  sources,
+  totalIncome,
+  transactions,
+  onExportSources,
+  onExportTransactions,
+}: {
+  apiIncome: number;
+  manualIncome: number;
+  sources: RevenueSource[];
+  totalIncome: number;
+  transactions: Transaction[];
+  onExportSources: () => void;
+  onExportTransactions: () => void;
+}) {
+  const connected = sources.filter((source) => source.status === 'Sinkron').length;
+  const verified = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
+
+  return (
+    <section className="reports-grid">
+      <article className="panel report-main">
+        <PanelTitle eyebrow="Laporan" title="Ringkasan keuangan" />
+        <div className="report-total">
+          <span>Total saldo tercatat</span>
+          <strong>{formatCurrency(totalIncome)}</strong>
         </div>
-      </section>
-
-      {/* ── PROJECTS ─────────────────────────────────────────────── */}
-      <section id="projects" className="bg-white px-5 py-20 text-[#10231f] sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase text-[#377463]">Portofolio</p>
-              <h2 className="mt-2 text-[clamp(2.2rem,5vw,4.4rem)] font-black leading-[.95]">
-                Proyek pilihan kami.
-              </h2>
-            </div>
-            <p className="max-w-sm text-sm leading-7 text-[#65766f]">Setiap project dikerjakan dengan standar produksi penuh — scalable, documented, dan maintainable.</p>
-          </div>
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-            {projects.map((project, index) => (
-              <motion.article
-                key={index}
-                className="group overflow-hidden rounded-2xl border border-[#dbe6df] bg-[#f4f7f2] transition hover:-translate-y-1 hover:shadow-[0_28px_60px_rgba(45,65,57,.14)]"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.07 }}
-              >
-                {/* Dummy image area */}
-                <div className={`relative h-44 bg-gradient-to-br ${project.bg} overflow-hidden`}>
-                  {/* Grid lines */}
-                  <div className="absolute inset-0" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px)', backgroundSize: '32px 32px' }} />
-                  {/* Decorative dots */}
-                  <div className="absolute bottom-5 left-6 flex gap-2">
-                    {project.dots.map((dot, i) => (
-                      <span key={i} className="block h-8 w-8 rounded-full opacity-80" style={{ backgroundColor: dot }} />
-                    ))}
-                  </div>
-                  {/* Corner accent bar */}
-                  <div className="absolute right-0 top-0 h-full w-1.5" style={{ backgroundColor: project.accent, opacity: 0.7 }} />
-                  {/* Tag */}
-                  <span className="absolute left-4 top-4 rounded-full px-3 py-1 text-xs font-black" style={{ backgroundColor: project.accent + '22', color: project.accent }}>
-                    {project.tag}
-                  </span>
-                </div>
-                {/* Card footer */}
-                <div className="flex items-center justify-between px-5 py-4">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.dots[0] }} />
-                    <span className="text-sm font-bold text-[#65766f]">{project.tag}</span>
-                  </div>
-                  <ArrowRight size={16} className="text-[#b0bcb8] transition group-hover:translate-x-1 group-hover:text-[#0e6d49]" />
-                </div>
-              </motion.article>
-            ))}
-          </div>
+        <div className="report-lines">
+          <ReportLine label="Saldo API" value={formatCurrency(apiIncome)} />
+          <ReportLine label="Saldo manual" value={formatCurrency(manualIncome)} />
+          <ReportLine label="API sinkron" value={`${connected}/2`} />
+          <ReportLine label="Transaksi terverifikasi" value={`${verified}/${transactions.length}`} />
         </div>
-      </section>
-
-      {/* ── PROCESS ──────────────────────────────────────────────── */}
-      <section id="process" className="bg-[#071914] px-5 py-20 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <p className="text-xs font-black uppercase text-emerald-400/70">Cara Kerja</p>
-            <h2 className="mt-2 text-[clamp(2rem,5vw,4rem)] font-black leading-[.95]">
-              Dari konsep ke produk yang berjalan.
-            </h2>
-            <p className="mx-auto mt-4 max-w-xl text-white/60 leading-7">
-              Setiap proyek dimulai dari pemahaman mendalam, dibangun secara transparan, dan diserahkan dengan dokumentasi lengkap.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-5">
-            {process.map((step, index) => (
-              <motion.div
-                key={step.label}
-                className="relative rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[#b9ffdc] font-black text-[#071914] text-lg">
-                  {index + 1}
-                </span>
-                <h3 className="mt-4 text-lg font-black">{step.label}</h3>
-                <p className="mt-2 text-sm leading-6 text-white/55">{step.desc}</p>
-              </motion.div>
-            ))}
-          </div>
+      </article>
+      <article className="panel">
+        <PanelTitle eyebrow="Export" title="Unduh data" />
+        <div className="export-actions">
+          <button className="primary-button" onClick={onExportSources}>
+            <Download size={18} />
+            Sumber pendapatan
+          </button>
+          <button className="ghost-button" onClick={onExportTransactions}>
+            <Download size={18} />
+            Transaksi
+          </button>
         </div>
-      </section>
-
-      {/* ── CTA ──────────────────────────────────────────────────── */}
-      <section className="bg-[#f4f7f2] px-5 py-16 text-[#10231f] sm:px-8">
-        <motion.div
-          className="mx-auto grid max-w-7xl gap-6 rounded-3xl bg-[#071914] p-8 text-white md:grid-cols-[1fr_auto] md:items-center md:p-12"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-        >
-          <div>
-            <p className="text-xs font-black uppercase text-[#b9ffdc]">Siap membangun?</p>
-            <h2 className="mt-2 text-[clamp(2rem,4vw,3.6rem)] font-black leading-none">
-              Mari ubah proses bisnis menjadi produk digital yang solid.
-            </h2>
-            <p className="mt-4 max-w-lg text-white/60 leading-7">
-              Ceritakan kebutuhan Anda. Kami akan jawab dalam 1×24 jam dengan estimasi dan langkah konkret.
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#b9ffdc] px-6 font-black text-[#071914] transition hover:-translate-y-0.5"
-              href="mailto:hello@vertinova.id?subject=Konsultasi%20Teknologi%20Vertinova"
-            >
-              Kirim Email
-              <Mail size={18} />
-            </a>
-            <a
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 font-bold text-white transition hover:bg-white hover:text-[#071914]"
-              href="https://wa.me/6281234567890?text=Halo%20Vertinova%2C%20saya%20ingin%20konsultasi%20project"
-              target="_blank"
-              rel="noreferrer"
-            >
-              WhatsApp
-              <ArrowRight size={18} />
-            </a>
-          </div>
-        </motion.div>
-      </section>
-
-      {/* ── FOOTER ───────────────────────────────────────────────── */}
-      <footer className="bg-[#071914] px-5 pt-12 pb-8 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-10 border-b border-white/10 pb-10 md:grid-cols-[2fr_1fr_1fr]">
-            <div>
-              <div className="flex items-center gap-3">
-                <img className="h-10 w-10 rounded-xl bg-white object-contain p-1" src={logo} alt="Vertinova" />
-                <div>
-                  <strong className="block text-white">Vertinova</strong>
-                  <span className="text-xs text-white/50">Technology Partner</span>
-                </div>
-              </div>
-              <p className="mt-4 max-w-xs text-sm leading-7 text-white/50">
-                Digital product studio yang membantu bisnis tumbuh melalui teknologi yang tepat guna dan bisa diandalkan.
-              </p>
-            </div>
-            <div>
-              <p className="mb-4 text-xs font-black uppercase text-white/40">Layanan</p>
-              <ul className="grid gap-2 text-sm text-white/60">
-                <li>Software Development</li>
-                <li>Cloud & Infrastructure</li>
-                <li>API Integration</li>
-                <li>Data & AI Automation</li>
-              </ul>
-            </div>
-            <div>
-              <p className="mb-4 text-xs font-black uppercase text-white/40">Kontak</p>
-              <ul className="grid gap-2 text-sm text-white/60">
-                <li className="flex items-center gap-2">
-                  <Mail size={14} />
-                  <a href="mailto:hello@vertinova.id" className="hover:text-white transition">hello@vertinova.id</a>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Globe2 size={14} />
-                  <span>vertinova.id</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <ServerCog size={14} />
-                  <span>Jakarta, Indonesia</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-          <div className="flex flex-col justify-between gap-4 pt-6 text-xs text-white/40 sm:flex-row">
-            <span>© {new Date().getFullYear()} Vertinova. All rights reserved.</span>
-            <span>Technology partner for modern business.</span>
-          </div>
-        </div>
-      </footer>
-    </main>
+      </article>
+    </section>
   );
 }
 
@@ -1124,13 +1003,7 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
         <h1>Ruang kendali pendapatan Vertinova.</h1>
         <p>Masuk sebagai admin untuk memantau sumber dana, sinkronisasi API, dan rekonsiliasi transaksi.</p>
       </section>
-      <motion.form
-        className="login-panel"
-        onSubmit={handleSubmit}
-        initial={{ opacity: 0, y: 22 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45 }}
-      >
+      <motion.form className="login-panel" onSubmit={handleSubmit} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}>
         <div>
           <p className="eyebrow">Secure Access</p>
           <h2>Login Admin</h2>
@@ -1154,7 +1027,7 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
         <label className="form-field">
           <span>Password</span>
           <div>
-            <ShieldCheck size={18} />
+            <LockKeyhole size={18} />
             <input
               type="password"
               value={password}
@@ -1169,6 +1042,7 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
         {error ? <div className="form-error">{error}</div> : null}
 
         <button className="primary-button login-submit" disabled={isSubmitting}>
+          {isSubmitting ? <Loader2 size={18} className="spin-icon" /> : <ShieldCheck size={18} />}
           {isSubmitting ? 'Memeriksa...' : 'Masuk Dashboard'}
         </button>
       </motion.form>
@@ -1176,34 +1050,202 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
   );
 }
 
+function LandingPage() {
+  const capabilities = [
+    { title: 'Software Development', description: 'Aplikasi web, mobile, dashboard, dan sistem operasional.', icon: Code2 },
+    { title: 'Cloud & Infrastructure', description: 'Deployment, server hardening, monitoring, dan otomasi.', icon: Cloud },
+    { title: 'Data & AI Automation', description: 'Integrasi data, otomasi proses, dan AI assistant.', icon: DatabaseZap },
+    { title: 'API Integration', description: 'Koneksi antar platform, payment, webhook, dan layanan pihak ketiga.', icon: PlugZap },
+  ];
+
+  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+
+  return (
+    <main className="site-page">
+      <section className="site-hero">
+        <img src={loginBackground} alt="" />
+        <div className="site-overlay" />
+        <header className="site-nav">
+          <div className="brand light">
+            <img className="brand-logo" src={logo} alt="Vertinova" />
+            <div>
+              <strong>Vertinova</strong>
+              <span>Technology Partner</span>
+            </div>
+          </div>
+          <nav>
+            <button onClick={() => scrollTo('capabilities')}>Kapabilitas</button>
+            <a href="mailto:hello@vertinova.id">Kontak</a>
+            <a className="site-login" href="/admin">
+              Masuk
+            </a>
+          </nav>
+        </header>
+        <div className="site-hero-content">
+          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
+            <span className="site-pill">
+              <Sparkles size={16} />
+              Digital product studio
+            </span>
+            <h1>Vertinova</h1>
+            <p>
+              Kami membangun aplikasi, integrasi API, otomasi, dan infrastruktur digital yang rapi, stabil,
+              dan siap dipakai tim operasional.
+            </p>
+            <div className="site-actions">
+              <a href="mailto:hello@vertinova.id?subject=Konsultasi%20Project%20Vertinova">
+                Konsultasi Project
+                <ArrowRight size={18} />
+              </a>
+              <button onClick={() => scrollTo('capabilities')}>Lihat Kapabilitas</button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <section id="capabilities" className="site-section">
+        <div className="section-heading">
+          <p className="eyebrow">Kapabilitas</p>
+          <h2>Sistem digital yang dirancang untuk kerja nyata.</h2>
+        </div>
+        <div className="capability-grid">
+          {capabilities.map((capability) => (
+            <article key={capability.title}>
+              <capability.icon size={24} />
+              <h3>{capability.title}</h3>
+              <p>{capability.description}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <footer className="site-footer">
+        <span>© {new Date().getFullYear()} Vertinova</span>
+        <a href="mailto:hello@vertinova.id">hello@vertinova.id</a>
+      </footer>
+    </main>
+  );
+}
+
 function MetricCard({
-  title,
-  value,
+  icon: Icon,
+  label,
   note,
-  trend,
+  tone,
+  value,
 }: {
-  title: string;
-  value: string;
+  icon: LucideIcon;
+  label: string;
   note: string;
-  trend: string;
+  tone?: 'dark';
+  value: string;
 }) {
   return (
-    <motion.article
-      className="metric-card"
-      initial={{ opacity: 0, x: 18 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      <div>
-        <span>{title}</span>
-        <strong>{value}</strong>
-        <small>{note}</small>
+    <motion.article className={`metric-card ${tone === 'dark' ? 'dark' : ''}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="metric-icon">
+        <Icon size={20} />
       </div>
-      <div className="trend-chip">
-        {trend.startsWith('-') ? <ArrowDownRight size={16} /> : <ArrowUpRight size={16} />}
-        {trend}
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{note}</small>
+    </motion.article>
+  );
+}
+
+function SourceCard({ index, source }: { index: number; source: RevenueSource }) {
+  return (
+    <motion.article className="source-card" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+      <div className="source-header">
+        <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
+          <source.icon size={20} />
+        </div>
+        <StatusPill status={source.status} />
+      </div>
+      <h3>{source.name}</h3>
+      <strong>{formatCurrency(source.amount)}</strong>
+      <p>{source.message ?? source.description}</p>
+      <span className="sync-time">Sinkron: {formatDate(source.lastSync)}</span>
+      <div className="progress-track">
+        <span style={{ width: `${source.target}%`, backgroundColor: source.color }} />
       </div>
     </motion.article>
+  );
+}
+
+function StatusPill({ status }: { status: RevenueSource['status'] }) {
+  const className = status === 'Sinkron' ? 'success' : status === 'Manual' ? 'neutral' : 'warning';
+  return <span className={`status-pill ${className}`}>{status}</span>;
+}
+
+function PanelTitle({ action, eyebrow, title }: { action?: React.ReactNode; eyebrow: string; title: string }) {
+  return (
+    <div className="panel-title">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h2>{title}</h2>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function LegendList({ items }: { items: Array<{ name: string; color: string }> }) {
+  return (
+    <div className="legend-list">
+      {items.map((item) => (
+        <span key={item.name}>
+          <i style={{ backgroundColor: item.color }} />
+          {item.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TransactionRow({ showSource = true, transaction }: { showSource?: boolean; transaction: Transaction }) {
+  return (
+    <div className="transaction-row">
+      <div>
+        {showSource ? <strong>{transaction.source}</strong> : null}
+        <span>{transaction.id} - {transaction.description}</span>
+      </div>
+      <div>
+        <b>{formatCurrency(transaction.amount)}</b>
+        <span>{new Date(transaction.date).toLocaleString('id-ID')}</span>
+      </div>
+      <span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span>
+    </div>
+  );
+}
+
+function EndpointRow({ icon: Icon, note, title }: { icon: LucideIcon; note: string; title: string }) {
+  return (
+    <div className="endpoint-row">
+      <Icon size={20} />
+      <div>
+        <strong>{title}</strong>
+        <span>{note}</span>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, note, title }: { icon: LucideIcon; note: string; title: string }) {
+  return (
+    <div className="empty-state">
+      <Icon size={24} />
+      <strong>{title}</strong>
+      <span>{note}</span>
+    </div>
+  );
+}
+
+function ReportLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
