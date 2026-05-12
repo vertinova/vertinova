@@ -489,7 +489,6 @@ const getSourcesFromDb = async () => {
 
 const getTransactionsFromDb = async () => {
   const rows = await prisma.financeTransaction.findMany({
-    take: 25,
     orderBy: { occurredAt: 'desc' },
     include: { source: { select: { name: true } } },
   });

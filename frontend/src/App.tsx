@@ -261,7 +261,6 @@ function App() {
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
   const [notice, setNotice] = useState('Dashboard siap digunakan.');
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [transactionDetails, setTransactionDetails] = useState<TransactionDetailState>(emptyTransactionDetails);
   const isAdminPath = routePath.startsWith('/admin');
 
   useEffect(() => {
@@ -363,51 +362,6 @@ function App() {
       setIsSyncing(false);
     }
   }, [authedFetch, mergeApiSources]);
-
-  const fetchTransactionDetails = useCallback(async () => {
-    const sourceIds: ApiSourceId[] = ['simpaskor', 'forbasi'];
-
-    setTransactionDetails({
-      simpaskor: { error: '', isLoading: true, items: [] },
-      forbasi: { error: '', isLoading: true, items: [] },
-    });
-
-    const entries = await Promise.all(
-      sourceIds.map(async (sourceId) => {
-        try {
-          const response = await authedFetch(`/api/finance/details/${sourceId}`);
-          const payload = (await response.json().catch(() => ({}))) as { items?: DetailItem[]; message?: string };
-
-          if (!response.ok) {
-            throw new Error(payload.message ?? `Gagal mengambil detail ${sourceId}.`);
-          }
-
-          return [sourceId, { error: '', isLoading: false, items: payload.items ?? [] }] as const;
-        } catch (error) {
-          return [
-            sourceId,
-            {
-              error: error instanceof Error ? error.message : `Gagal mengambil detail ${sourceId}.`,
-              isLoading: false,
-              items: [],
-            },
-          ] as const;
-        }
-      }),
-    );
-
-    const nextState = Object.fromEntries(entries) as TransactionDetailState;
-    setTransactionDetails(nextState);
-
-    const failed = Object.values(nextState).filter((state) => state.error).length;
-    setNotice(failed > 0 ? 'Sebagian detail transaksi belum bisa dimuat.' : 'Detail transaksi Simpaskor dan Forbasi berhasil dimuat.');
-  }, [authedFetch]);
-
-  useEffect(() => {
-    if (activeView === 'transactions') {
-      void fetchTransactionDetails();
-    }
-  }, [activeView, fetchTransactionDetails]);
 
   useEffect(() => {
     const boot = async () => {
@@ -673,11 +627,11 @@ function App() {
 
         {activeView === 'transactions' ? (
           <TransactionsView
-            detailState={transactionDetails}
             query={query}
+            sources={sources}
             transactions={filteredTransactions}
             onExportTransactions={exportTransactions}
-            onRefreshDetails={fetchTransactionDetails}
+            onRefreshTransactions={loadFinanceData}
           />
         ) : null}
 
@@ -1046,55 +1000,40 @@ function IntegrationsView({
 }
 
 function TransactionsView({
-  detailState,
   query,
+  sources,
   transactions,
   onExportTransactions,
-  onRefreshDetails,
+  onRefreshTransactions,
 }: {
-  detailState: TransactionDetailState;
   query: string;
+  sources: RevenueSource[];
   transactions: Transaction[];
   onExportTransactions: () => void;
-  onRefreshDetails: () => void;
+  onRefreshTransactions: () => void;
 }) {
   const keyword = query.trim().toLowerCase();
   const sourceConfigs: Array<{ color: string; id: ApiSourceId; title: string }> = [
     { id: 'simpaskor', title: 'Simpaskor', color: '#16a34a' },
     { id: 'forbasi', title: 'Forbasi', color: '#2563eb' },
   ];
-  const filteredDetailState = sourceConfigs.reduce((state, source) => {
-    const current = detailState[source.id];
-    state[source.id] = {
-      ...current,
-      items: keyword
-        ? current.items.filter((item) =>
-            [item.id, item.type, item.title, item.subtitle, item.orderId]
-              .join(' ')
-              .toLowerCase()
-              .includes(keyword),
-          )
-        : current.items,
-    };
-    return state;
-  }, {} as TransactionDetailState);
-  const totalDetailCount = Object.values(filteredDetailState).reduce((sum, state) => sum + state.items.length, 0);
-  const totalDetailAmount = Object.values(filteredDetailState).reduce(
-    (sum, state) => sum + state.items.reduce((subtotal, item) => subtotal + item.adminFee, 0),
-    0,
+  const apiSources = sources.filter((source): source is RevenueSource & { id: ApiSourceId } =>
+    source.id === 'simpaskor' || source.id === 'forbasi',
   );
-  const isLoading = Object.values(detailState).some((state) => state.isLoading);
+  const totalApiAmount = apiSources.reduce((sum, source) => sum + source.amount, 0);
+  const verifiedTransactions = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
+  const sourceTotals = Object.fromEntries(apiSources.map((source) => [source.id, source.amount])) as Record<ApiSourceId, number>;
 
   return (
     <section className="transactions-page">
       <article className="panel transaction-overview">
         <PanelTitle
           eyebrow="Transaksi"
-          title="Detail transaksi Simpaskor dan Forbasi"
+          title="Transaksi Simpaskor dan Forbasi"
           action={
             <div className="transaction-actions">
-              <button className="ghost-button" disabled={isLoading} onClick={onRefreshDetails}>
-                {isLoading ? <Loader2 size={17} className="spin-icon" /> : <RefreshCcw size={17} />}
+              <button className="ghost-button" onClick={onRefreshTransactions}>
+                <RefreshCcw size={17} />
                 Muat ulang
               </button>
               <button className="ghost-button" onClick={onExportTransactions}>
@@ -1106,12 +1045,12 @@ function TransactionsView({
         />
         <div className="transaction-overview-grid">
           <div>
-            <span>Total detail API</span>
-            <strong>{formatCurrency(totalDetailAmount)}</strong>
+            <span>Total transaksi API</span>
+            <strong>{formatCurrency(totalApiAmount)}</strong>
           </div>
           <div>
-            <span>Baris detail</span>
-            <strong>{totalDetailCount}</strong>
+            <span>Terverifikasi</span>
+            <strong>{verifiedTransactions}</strong>
           </div>
           <div>
             <span>Transaksi tersimpan</span>
@@ -1122,34 +1061,35 @@ function TransactionsView({
 
       <div className="transaction-detail-grid">
         {sourceConfigs.map((source) => (
-          <TransactionDetailPanel
+          <TransactionSourcePanel
             color={source.color}
             key={source.id}
             sourceId={source.id}
-            state={filteredDetailState[source.id]}
+            total={sourceTotals[source.id] ?? 0}
+            transactions={transactions.filter((transaction) => transaction.sourceId === source.id)}
             title={source.title}
           />
         ))}
       </div>
 
-      <ReconciliationView compact transactions={transactions} onExportTransactions={onExportTransactions} />
+      <ReconciliationView compact sourceTotals={sourceTotals} transactions={transactions} onExportTransactions={onExportTransactions} />
     </section>
   );
 }
 
-function TransactionDetailPanel({
+function TransactionSourcePanel({
   color,
   sourceId,
-  state,
+  total,
+  transactions,
   title,
 }: {
   color: string;
   sourceId: ApiSourceId;
-  state: { error: string; isLoading: boolean; items: DetailItem[] };
+  total: number;
+  transactions: Transaction[];
   title: string;
 }) {
-  const total = state.items.reduce((sum, item) => sum + item.adminFee, 0);
-
   return (
     <article className="panel transaction-detail-panel">
       <div className="transaction-detail-head">
@@ -1160,43 +1100,35 @@ function TransactionDetailPanel({
         </div>
         <div>
           <strong>{formatCurrency(total)}</strong>
-          <span>{state.items.length} transaksi</span>
+          <span>{transactions.length} transaksi tersimpan</span>
         </div>
       </div>
 
-      {state.isLoading ? (
-        <div className="modal-loading compact">
-          <Loader2 size={24} className="spin-icon" />
-          <span>Memuat detail transaksi...</span>
-        </div>
-      ) : state.error ? (
-        <EmptyState icon={BadgeCheck} title="Detail belum tersedia." note={state.error} />
-      ) : state.items.length === 0 ? (
-        <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Tidak ada data transaksi yang cocok." />
+      {transactions.length === 0 ? (
+        <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Data akan muncul setelah webhook pembayaran berhasil diterima." />
       ) : (
         <div className="table-wrap detail-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Tipe</th>
-                <th>Nama / Event</th>
-                <th>Qty</th>
-                <th>Admin Fee</th>
-                <th>Tanggal Bayar</th>
+                <th>ID</th>
+                <th>Keterangan</th>
+                <th>Nominal</th>
+                <th>Tanggal</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {state.items.map((item) => (
-                <tr key={`${sourceId}-${item.id}-${item.orderId}`}>
-                  <td><span className="type-chip">{item.type}</span></td>
+              {transactions.map((transaction) => (
+                <tr key={`${sourceId}-${transaction.id}`}>
+                  <td className="detail-order-id">{transaction.id}</td>
                   <td>
-                    <div className="detail-cell-title">{item.title}</div>
-                    {item.subtitle ? <div className="detail-cell-sub">{item.subtitle}</div> : null}
-                    <div className="detail-order-id">{item.orderId || '-'}</div>
+                    <div className="detail-cell-title">{transaction.description}</div>
+                    <div className="detail-cell-sub">{transaction.source}</div>
                   </td>
-                  <td>{item.quantity}</td>
-                  <td>{formatCurrency(item.adminFee)}</td>
-                  <td>{formatDate(item.paidAt)}</td>
+                  <td>{formatCurrency(transaction.amount)}</td>
+                  <td>{formatDate(transaction.date)}</td>
+                  <td><span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span></td>
                 </tr>
               ))}
             </tbody>
@@ -1209,10 +1141,12 @@ function TransactionDetailPanel({
 
 function ReconciliationView({
   compact = false,
+  sourceTotals,
   transactions,
   onExportTransactions,
 }: {
   compact?: boolean;
+  sourceTotals?: Partial<Record<ApiSourceId, number>>;
   transactions: Transaction[];
   onExportTransactions: () => void;
 }) {
@@ -1253,6 +1187,7 @@ function ReconciliationView({
               <TransactionGroup
                 color={group.color}
                 key={group.id}
+                totalOverride={sourceTotals?.[group.id]}
                 title={group.title}
                 transactions={group.transactions}
               />
@@ -1275,14 +1210,16 @@ function ReconciliationView({
 
 function TransactionGroup({
   color,
+  totalOverride,
   title,
   transactions,
 }: {
   color: string;
+  totalOverride?: number;
   title: string;
   transactions: Transaction[];
 }) {
-  const total = transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
+  const total = totalOverride ?? transactions.reduce((sum, transaction) => sum + transaction.amount, 0);
 
   return (
     <div className="transaction-group">
