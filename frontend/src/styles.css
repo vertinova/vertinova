@@ -673,6 +673,138 @@
     @apply grid gap-2;
   }
 
+  /* ── Dashboard redesign ── */
+
+  .db-hero {
+    @apply grid gap-6 rounded-xl border border-[#24352d] bg-[#101a16] p-6 text-white;
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .db-hero-left {
+    @apply grid content-start gap-3;
+  }
+
+  .db-hero-eyebrow {
+    @apply text-xs font-black uppercase text-white/50;
+  }
+
+  .db-hero-total {
+    @apply text-[clamp(2rem,4vw,3.2rem)] font-black leading-none text-white;
+  }
+
+  .db-breakdown-bar {
+    @apply flex h-2.5 overflow-hidden rounded-full bg-white/10;
+    gap: 2px;
+  }
+
+  .db-breakdown-bar span {
+    @apply block h-full rounded-full transition-all duration-700;
+  }
+
+  .db-hero-legend {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .db-hero-legend span {
+    @apply inline-flex items-center gap-1.5 text-xs text-white/65;
+  }
+
+  .db-hero-legend i {
+    @apply h-2 w-2 rounded-full;
+  }
+
+  .db-hero-note {
+    @apply text-xs leading-6 text-white/48;
+  }
+
+  .db-hero-stats {
+    @apply grid grid-cols-2 content-start gap-3;
+  }
+
+  .db-stat {
+    @apply grid content-start gap-1 rounded-xl border border-white/10 bg-white/6 p-4;
+  }
+
+  .db-stat svg {
+    @apply mb-1 text-white/45;
+  }
+
+  .db-stat strong {
+    @apply text-xl font-black leading-tight text-white;
+  }
+
+  .db-stat span {
+    @apply text-xs text-white/50;
+  }
+
+  .db-sources-row {
+    @apply grid grid-cols-3 gap-4 max-[1100px]:grid-cols-1;
+  }
+
+  .db-api-panel {
+    @apply grid content-start gap-4 rounded-xl border border-line bg-white p-5 shadow-[0_8px_32px_rgba(42,55,48,.07)];
+  }
+
+  .db-panel-header {
+    @apply flex items-center gap-3;
+  }
+
+  .db-panel-header h3 {
+    @apply text-base font-black;
+  }
+
+  .db-panel-amount {
+    @apply text-[clamp(1.5rem,3vw,2rem)] font-black leading-none;
+  }
+
+  .db-pct-row {
+    @apply grid gap-2;
+  }
+
+  .db-pct-row > span {
+    @apply text-xs text-muted;
+  }
+
+  .db-pct-track {
+    @apply h-2 overflow-hidden rounded-full bg-[#edf1ee];
+  }
+
+  .db-pct-track span {
+    @apply block h-full rounded-full transition-all duration-700;
+  }
+
+  .db-panel-dl {
+    @apply grid gap-2;
+  }
+
+  .db-panel-dl div {
+    @apply grid gap-0.5 rounded-lg bg-[#f8faf9] px-3 py-2.5;
+  }
+
+  .db-panel-dl dt {
+    @apply text-xs font-bold uppercase text-muted;
+  }
+
+  .db-panel-dl dd {
+    @apply m-0 text-sm font-bold text-ink;
+  }
+
+  .db-manual-list {
+    @apply grid gap-2;
+  }
+
+  .db-manual-item {
+    @apply flex items-center justify-between gap-3 rounded-lg border border-line bg-[#fafbfa] px-3 py-2.5;
+  }
+
+  .db-manual-item > div {
+    @apply flex items-center gap-2 text-sm text-muted;
+  }
+
+  .db-manual-item strong {
+    @apply text-sm font-black;
+  }
+
   .modal-overlay {
     @apply fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm;
   }
@@ -731,6 +863,14 @@
 }
 
 @media (max-width: 860px) {
+  .db-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .db-hero-stats {
+    @apply grid-cols-4;
+  }
+
   .login-page {
     grid-template-columns: 1fr;
     @apply p-4;
@@ -770,6 +910,10 @@
 }
 
 @media (max-width: 620px) {
+  .db-hero-stats {
+    @apply grid-cols-2;
+  }
+
   .topbar-actions,
   .site-nav nav {
     @apply w-full;

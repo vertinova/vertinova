@@ -180,11 +180,6 @@ const emptyCashflow = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu'].m
   expense: 0,
 }));
 
-const emptyWeeklyApi = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((day) => ({
-  day,
-  simpaskor: 0,
-  forbasi: 0,
-}));
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('id-ID', {
@@ -458,16 +453,6 @@ function App() {
   const currentCashflow = emptyCashflow.map((row, index) =>
     index === emptyCashflow.length - 1 ? { ...row, income: toMillions(totalIncome) } : row,
   );
-  const currentWeeklyApi = emptyWeeklyApi.map((row, index) =>
-    index === emptyWeeklyApi.length - 1
-      ? {
-          ...row,
-          simpaskor: toMillions(sources.find((source) => source.id === 'simpaskor')?.amount ?? 0),
-          forbasi: toMillions(sources.find((source) => source.id === 'forbasi')?.amount ?? 0),
-        }
-      : row,
-  );
-
   const exportSources = () => {
     downloadCsv(
       `vertinova-sumber-pendapatan-${new Date().toISOString().slice(0, 10)}.csv`,
@@ -604,7 +589,6 @@ function App() {
           <DashboardView
             apiIncome={apiIncome}
             currentCashflow={currentCashflow}
-            currentWeeklyApi={currentWeeklyApi}
             filteredTransactions={filteredTransactions}
             manualIncome={manualIncome}
             sources={filteredSources}
@@ -657,7 +641,6 @@ function App() {
 function DashboardView({
   apiIncome,
   currentCashflow,
-  currentWeeklyApi,
   filteredTransactions,
   manualIncome,
   sources,
@@ -670,7 +653,6 @@ function DashboardView({
 }: {
   apiIncome: number;
   currentCashflow: Array<{ month: string; income: number; expense: number }>;
-  currentWeeklyApi: Array<{ day: string; simpaskor: number; forbasi: number }>;
   filteredTransactions: Transaction[];
   manualIncome: number;
   sources: RevenueSource[];
@@ -681,24 +663,69 @@ function DashboardView({
   verifiedCount: number;
   onExportTransactions: () => void;
 }) {
+  const connectedCount = sources.filter((s) => s.status === 'Sinkron').length;
+  const simpaskor = sources.find((s) => s.id === 'simpaskor');
+  const forbasi = sources.find((s) => s.id === 'forbasi');
+  const manualSources = sources.filter((s) => s.category === 'manual');
+
+  const simpaskorPct = totalIncome > 0 ? (simpaskor?.amount ?? 0) / totalIncome * 100 : 0;
+  const forbasiPct = totalIncome > 0 ? (forbasi?.amount ?? 0) / totalIncome * 100 : 0;
+  const manualPct = Math.max(0, 100 - simpaskorPct - forbasiPct);
+
   return (
     <>
-      <section className="summary-grid">
-        <MetricCard icon={Banknote} label="Total saldo" value={formatCurrency(totalIncome)} note={syncMessage} tone="dark" />
-        <MetricCard icon={PlugZap} label="Saldo API" value={formatCurrency(apiIncome)} note="Simpaskor + Forbasi" />
-        <MetricCard icon={Landmark} label="Manual" value={formatCurrency(manualIncome)} note="Desa, Sekolah, Swasta" />
-        <MetricCard icon={BadgeCheck} label="Terverifikasi" value={`${verifiedCount}/${transactions.length}`} note="Transaksi terbaru" />
+      {/* ── Hero ── */}
+      <motion.section className="db-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="db-hero-left">
+          <p className="db-hero-eyebrow">Total admin fee masuk</p>
+          <strong className="db-hero-total">{formatCurrency(totalIncome)}</strong>
+          <div className="db-breakdown-bar">
+            <span style={{ width: `${simpaskorPct}%`, backgroundColor: '#16a34a' }} title={`Simpaskor ${simpaskorPct.toFixed(1)}%`} />
+            <span style={{ width: `${forbasiPct}%`, backgroundColor: '#2563eb' }} title={`Forbasi ${forbasiPct.toFixed(1)}%`} />
+            <span style={{ width: `${manualPct}%`, backgroundColor: '#d97706' }} title={`Manual ${manualPct.toFixed(1)}%`} />
+          </div>
+          <div className="db-hero-legend">
+            <span><i style={{ backgroundColor: '#16a34a' }} />Simpaskor {formatCurrency(simpaskor?.amount ?? 0)}</span>
+            <span><i style={{ backgroundColor: '#2563eb' }} />Forbasi {formatCurrency(forbasi?.amount ?? 0)}</span>
+            <span><i style={{ backgroundColor: '#d97706' }} />Manual {formatCurrency(manualIncome)}</span>
+          </div>
+          <p className="db-hero-note">{syncMessage}</p>
+        </div>
+        <div className="db-hero-stats">
+          <div className="db-stat">
+            <Banknote size={18} />
+            <strong>{formatCurrency(apiIncome)}</strong>
+            <span>Saldo API</span>
+          </div>
+          <div className="db-stat">
+            <Landmark size={18} />
+            <strong>{formatCurrency(manualIncome)}</strong>
+            <span>Saldo manual</span>
+          </div>
+          <div className="db-stat">
+            <PlugZap size={18} />
+            <strong>{connectedCount}/2</strong>
+            <span>API sinkron</span>
+          </div>
+          <div className="db-stat">
+            <BadgeCheck size={18} />
+            <strong>{verifiedCount}/{transactions.length}</strong>
+            <span>Terverifikasi</span>
+          </div>
+        </div>
+      </motion.section>
+
+      {/* ── Sumber ── */}
+      <section className="db-sources-row">
+        <DbApiPanel source={simpaskor} totalIncome={totalIncome} />
+        <DbApiPanel source={forbasi} totalIncome={totalIncome} />
+        <DbManualPanel sources={manualSources} totalIncome={totalIncome} />
       </section>
 
-      <section className="source-grid">
-        {sources.map((source, index) => (
-          <SourceCard key={source.id} source={source} index={index} />
-        ))}
-      </section>
-
+      {/* ── Charts ── */}
       <section className="analytics-grid">
         <article className="panel wide">
-          <PanelTitle eyebrow="Cashflow" title="Tren pemasukan" action={<span className="soft-chip">8 bulan</span>} />
+          <PanelTitle eyebrow="Cashflow" title="Tren pemasukan" action={<span className="soft-chip">2026</span>} />
           <div className="chart-area">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={currentCashflow}>
@@ -709,9 +736,9 @@ function DashboardView({
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
-                <Tooltip formatter={(value) => `${value} juta`} />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `${v} jt`} tick={{ fontSize: 12 }} />
+                <Tooltip formatter={(value) => [`${value} juta`, 'Pemasukan']} />
                 <Area type="monotone" dataKey="income" stroke="#15803d" strokeWidth={3} fill="url(#incomeGradient)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -721,9 +748,9 @@ function DashboardView({
         <article className="panel">
           <PanelTitle eyebrow="Komposisi" title="Sumber pendapatan" />
           <div className="donut-wrap">
-            <ResponsiveContainer width="100%" height={230}>
+            <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={sourceChart} innerRadius={58} outerRadius={88} paddingAngle={5} dataKey="value">
+                <Pie data={sourceChart} innerRadius={55} outerRadius={85} paddingAngle={4} dataKey="value">
                   {sourceChart.map((entry) => (
                     <Cell key={entry.name} fill={entry.color} />
                   ))}
@@ -734,26 +761,90 @@ function DashboardView({
           </div>
           <LegendList items={sourceChart} />
         </article>
-
-        <article className="panel">
-          <PanelTitle eyebrow="Saldo API" title="Simpaskor vs Forbasi" />
-          <div className="chart-area small">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={currentWeeklyApi}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="day" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} tickFormatter={(value) => `${value} jt`} />
-                <Tooltip formatter={(value) => `${value} juta`} />
-                <Bar dataKey="simpaskor" fill="#16a34a" radius={[7, 7, 0, 0]} />
-                <Bar dataKey="forbasi" fill="#2563eb" radius={[7, 7, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </article>
       </section>
 
-      <ReconciliationView compact transactions={filteredTransactions.slice(0, 6)} onExportTransactions={onExportTransactions} />
+      {/* ── Transaksi terbaru ── */}
+      <ReconciliationView compact transactions={filteredTransactions.slice(0, 8)} onExportTransactions={onExportTransactions} />
     </>
+  );
+}
+
+function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined; totalIncome: number }) {
+  if (!source) return null;
+  const pct = totalIncome > 0 ? (source.amount / totalIncome) * 100 : 0;
+
+  return (
+    <motion.article className="db-api-panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="db-panel-header">
+        <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
+          <source.icon size={22} />
+        </div>
+        <div>
+          <h3>{source.name}</h3>
+          <StatusPill status={source.status} />
+        </div>
+      </div>
+
+      <strong className="db-panel-amount">{formatCurrency(source.amount)}</strong>
+
+      <div className="db-pct-row">
+        <span>{pct.toFixed(1)}% dari total</span>
+        <div className="db-pct-track">
+          <span style={{ width: `${pct}%`, backgroundColor: source.color }} />
+        </div>
+      </div>
+
+      <dl className="db-panel-dl">
+        <div>
+          <dt>Terakhir sinkron</dt>
+          <dd>{formatDate(source.lastSync)}</dd>
+        </div>
+        <div>
+          <dt>Keterangan</dt>
+          <dd>{source.message ?? source.description}</dd>
+        </div>
+      </dl>
+    </motion.article>
+  );
+}
+
+function DbManualPanel({ sources, totalIncome }: { sources: RevenueSource[]; totalIncome: number }) {
+  const total = sources.reduce((sum, s) => sum + s.amount, 0);
+  const pct = totalIncome > 0 ? (total / totalIncome) * 100 : 0;
+
+  return (
+    <motion.article className="db-api-panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="db-panel-header">
+        <div className="source-icon" style={{ backgroundColor: '#d9770620', color: '#d97706' }}>
+          <Landmark size={22} />
+        </div>
+        <div>
+          <h3>Manual</h3>
+          <span className="status-pill neutral">Manual</span>
+        </div>
+      </div>
+
+      <strong className="db-panel-amount">{formatCurrency(total)}</strong>
+
+      <div className="db-pct-row">
+        <span>{pct.toFixed(1)}% dari total</span>
+        <div className="db-pct-track">
+          <span style={{ width: `${pct}%`, backgroundColor: '#d97706' }} />
+        </div>
+      </div>
+
+      <div className="db-manual-list">
+        {sources.map((s) => (
+          <div key={s.id} className="db-manual-item">
+            <div>
+              <s.icon size={14} style={{ color: s.color }} />
+              <span>{s.name}</span>
+            </div>
+            <strong>{formatCurrency(s.amount)}</strong>
+          </div>
+        ))}
+      </div>
+    </motion.article>
   );
 }
 
