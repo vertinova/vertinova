@@ -345,12 +345,55 @@ const ensureSuperAdmin = async () => {
     return;
   }
 
-  const user = await prisma.adminUser.upsert({
-    where: { username },
-    create: { name, username, email, passwordHash: hashPassword(password), role: 'serigala', isActive: true },
-    update: { name, email, passwordHash: hashPassword(password), role: 'serigala', isActive: true },
+  const existingUsers = await prisma.adminUser.findMany({
+    where: {
+      OR: [
+        { username },
+        ...(email ? [{ email }] : []),
+      ],
+    },
     include: userInclude,
   });
+  const existingByUsername = existingUsers.find((user) => user.username === username);
+  const existingByEmail = email ? existingUsers.find((user) => user.email === email) : null;
+  const hasSplitIdentityConflict = Boolean(
+    existingByUsername &&
+    existingByEmail &&
+    existingByUsername.id !== existingByEmail.id
+  );
+  const passwordHash = hashPassword(password);
+  let user;
+
+  if (hasSplitIdentityConflict) {
+    console.warn(
+      `SUPER_ADMIN_EMAIL sudah digunakan oleh akun "${existingByEmail.username}". ` +
+      `Akun "${existingByUsername.username}" tetap dijadikan Super Admin tanpa mengubah email.`
+    );
+  }
+
+  const existing = existingByUsername ?? existingByEmail;
+
+  if (existing) {
+    const data = {
+      name,
+      username,
+      email: hasSplitIdentityConflict ? existing.email : email,
+      passwordHash,
+      role: 'serigala',
+      isActive: true,
+    };
+
+    user = await prisma.adminUser.update({
+      where: { id: existing.id },
+      data,
+      include: userInclude,
+    });
+  } else {
+    user = await prisma.adminUser.create({
+      data: { name, username, email, passwordHash, role: 'serigala', isActive: true },
+      include: userInclude,
+    });
+  }
 
   await prisma.accountPermission.deleteMany({ where: { userId: user.id } });
   await prisma.accountPermission.createMany({
