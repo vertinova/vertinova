@@ -62,15 +62,18 @@ model ApiSyncLog {
 model AdminUser {
   id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   name         String   @db.VarChar(120)
-  email        String   @unique @db.VarChar(190)
+  username     String   @unique @db.VarChar(80)
+  email        String?  @unique @db.VarChar(190)
   passwordHash String   @map("password_hash") @db.VarChar(255)
-  role         AdminRole @default(admin)
+  role         String   @default("admin") @db.VarChar(60)
   isActive     Boolean  @default(true) @map("is_active")
   lastLoginAt  DateTime? @map("last_login_at")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   sessions     UserSession[]
+  permissions  AccountPermission[]
+  revenueShare RevenueShare?
 
   @@map("admin_users")
 }
@@ -86,6 +89,33 @@ model UserSession {
 
   @@index([userId, expiresAt], name: "index_user_expires_at")
   @@map("user_sessions")
+}
+
+model AccountPermission {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId     BigInt    @map("user_id") @db.UnsignedBigInt
+  permission String    @db.VarChar(100)
+  canUse     Boolean   @default(true) @map("can_use")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user       AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permission], name: "unique_user_permission")
+  @@index([permission], name: "index_permission")
+  @@map("account_permissions")
+}
+
+model RevenueShare {
+  id         BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId     BigInt    @unique @map("user_id") @db.UnsignedBigInt
+  percentage Decimal   @default(0) @db.Decimal(5, 2)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  user       AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("revenue_shares")
 }
 
 enum Category {
@@ -115,7 +145,3 @@ enum SyncStatus {
   failed
 }
 
-enum AdminRole {
-  super_admin
-  admin
-}

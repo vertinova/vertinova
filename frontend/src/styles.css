@@ -240,7 +240,8 @@
   }
 
   .bottom-nav {
-    @apply fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 gap-2 border-t border-line bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom)+.6rem)] pt-2.5 shadow-[0_-18px_45px_rgba(42,55,48,.14)] backdrop-blur;
+    @apply fixed inset-x-0 bottom-0 z-40 grid gap-2 border-t border-line bg-white/95 px-3 pb-[calc(env(safe-area-inset-bottom)+.6rem)] pt-2.5 shadow-[0_-18px_45px_rgba(42,55,48,.14)] backdrop-blur;
+    grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   }
 
   .bottom-nav button {
@@ -734,6 +735,87 @@
     @apply grid gap-3;
   }
 
+  .management-grid {
+    @apply grid grid-cols-1 gap-4;
+  }
+
+  .management-form {
+    @apply grid gap-4;
+  }
+
+  .form-grid {
+    @apply grid grid-cols-1 gap-3;
+  }
+
+  .form-grid.compact {
+    @apply grid-cols-1;
+  }
+
+  .form-grid.compact input,
+  .share-card input {
+    @apply min-h-11 rounded-lg border border-line bg-[#f8faf9] px-3 text-ink outline-0 focus:border-[#2f7d55];
+  }
+
+  .permission-grid {
+    @apply grid grid-cols-1 gap-2;
+  }
+
+  .permission-item,
+  .toggle-row {
+    @apply flex min-h-11 items-center gap-2 rounded-lg border border-line bg-[#f8faf9] px-3 text-sm font-bold text-ink;
+  }
+
+  .permission-item input,
+  .toggle-row input {
+    @apply h-4 w-4 accent-[#16211d];
+  }
+
+  .management-list {
+    @apply grid gap-3;
+  }
+
+  .account-card,
+  .share-card {
+    @apply grid gap-3 rounded-lg border border-line bg-[#fbfcfb] p-3;
+  }
+
+  .account-card-head,
+  .share-card {
+    @apply items-start;
+  }
+
+  .account-card-head {
+    @apply flex justify-between gap-3;
+  }
+
+  .account-card strong,
+  .account-card span,
+  .share-card strong,
+  .share-card span {
+    @apply block;
+  }
+
+  .account-card span,
+  .share-card span {
+    @apply text-sm text-muted;
+  }
+
+  .share-summary {
+    @apply mb-4 rounded-lg bg-[#16211d] p-5 text-white;
+  }
+
+  .share-summary span {
+    @apply text-sm font-bold text-white/62;
+  }
+
+  .share-summary strong {
+    @apply mt-2 block text-[clamp(1.8rem,4vw,3.2rem)] font-black leading-none;
+  }
+
+  .share-card label {
+    @apply grid gap-1;
+  }
+
   .site-page {
     @apply min-h-screen bg-[#f6f7f5] text-ink;
   }
@@ -1100,7 +1182,8 @@
   }
 
   .summary-grid,
-  .transaction-overview-grid {
+  .transaction-overview-grid,
+  .form-grid {
     @apply grid-cols-2;
   }
 
@@ -1206,8 +1289,18 @@
 
   .integration-grid,
   .reports-grid,
-  .transaction-detail-grid {
+  .transaction-detail-grid,
+  .management-grid {
     @apply grid-cols-2;
+  }
+
+  .permission-grid {
+    @apply grid-cols-2;
+  }
+
+  .share-card {
+    grid-template-columns: minmax(180px, 1fr) 150px minmax(150px, .8fr) auto;
+    @apply items-center;
   }
 
   .db-hero {

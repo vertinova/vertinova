@@ -68,6 +68,18 @@ const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS ?? 12);
 
 const prisma = new PrismaClient();
 
+const permissionCatalog = [
+  { id: 'finance.dashboard', label: 'Ringkasan dashboard', feature: 'dashboard' },
+  { id: 'finance.transactions', label: 'Transaksi', feature: 'transactions' },
+  { id: 'finance.reports', label: 'Ekspor laporan', feature: 'reports' },
+  { id: 'accounts.manage', label: 'Manajemen akun', feature: 'accounts' },
+  { id: 'revenue_shares.manage', label: 'Pembagian persentase', feature: 'revenueShares' },
+];
+
+const allPermissionIds = permissionCatalog.map((permission) => permission.id);
+const defaultAccountPermissions = ['finance.dashboard'];
+const superAdminRoles = new Set(['serigala', 'super_admin']);
+
 const loginAttempts = new Map();
 
 const checkRateLimit = (ip) => {
@@ -129,7 +141,7 @@ const json = (response, statusCode, payload) => {
   response.writeHead(statusCode, {
     'Access-Control-Allow-Origin': process.env.FRONTEND_ORIGIN ?? 'http://localhost:5173',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-API-Key',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
     'Content-Type': 'application/json; charset=utf-8',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
@@ -174,12 +186,59 @@ const getBearerToken = (request) => {
   return authorization.slice('Bearer '.length).trim();
 };
 
+const isSuperAdmin = (user) => superAdminRoles.has(user?.role);
+
+const getPermissionIds = (user) => {
+  if (isSuperAdmin(user)) return allPermissionIds;
+  return (user?.permissions ?? [])
+    .filter((permission) => permission.canUse)
+    .map((permission) => permission.permission);
+};
+
+const canUse = (user, permission) => isSuperAdmin(user) || getPermissionIds(user).includes(permission);
+
 const sanitizeUser = (user) => ({
   id: user.id,
   name: user.name,
+  username: user.username,
   email: user.email,
   role: user.role,
+  permissions: getPermissionIds(user),
+  revenueSharePercent: Number(user.revenueShare?.percentage ?? 0),
 });
+
+const serializeManagedUser = (user, totalIncome = 0) => {
+  const percentage = Number(user.revenueShare?.percentage ?? 0);
+  return {
+    ...sanitizeUser(user),
+    isActive: user.isActive,
+    lastLoginAt: user.lastLoginAt,
+    revenueShareAmount: Math.round(totalIncome * percentage / 100),
+  };
+};
+
+const parseUsername = (value) => String(value ?? '').trim().toLowerCase();
+
+const validateUsername = (username) => /^[a-z0-9._-]{3,80}$/.test(username);
+
+const requirePermission = (user, response, permission) => {
+  if (canUse(user, permission)) return true;
+  json(response, 403, { message: 'Akun ini tidak memiliki akses ke fitur tersebut.' });
+  return false;
+};
+
+const totalVerifiedIncome = async () => {
+  const result = await prisma.financeTransaction.aggregate({
+    where: { direction: 'income', status: 'terverifikasi' },
+    _sum: { amount: true },
+  });
+  return Number(result._sum.amount ?? 0);
+};
+
+const userInclude = {
+  permissions: true,
+  revenueShare: true,
+};
 
 const ensureRevenueSources = async () => {
   const sources = [
@@ -198,23 +257,112 @@ const ensureRevenueSources = async () => {
   }
 };
 
+const getScalarCount = (rows) => Number(Object.values(rows?.[0] ?? { count: 0 })[0] ?? 0);
+
+const tableExists = async (tableName) => {
+  const rows = await prisma.$queryRawUnsafe(
+    'SELECT COUNT(*) AS count FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?',
+    tableName,
+  );
+  return getScalarCount(rows) > 0;
+};
+
+const columnExists = async (tableName, columnName) => {
+  const rows = await prisma.$queryRawUnsafe(
+    'SELECT COUNT(*) AS count FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
+    tableName,
+    columnName,
+  );
+  return getScalarCount(rows) > 0;
+};
+
+const indexExists = async (tableName, indexName) => {
+  const rows = await prisma.$queryRawUnsafe(
+    'SELECT COUNT(*) AS count FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?',
+    tableName,
+    indexName,
+  );
+  return getScalarCount(rows) > 0;
+};
+
+const ensureAccessSchema = async () => {
+  if (!(await tableExists('admin_users'))) return;
+
+  if (!(await columnExists('admin_users', 'username'))) {
+    await prisma.$executeRawUnsafe('ALTER TABLE admin_users ADD COLUMN username VARCHAR(80) NULL AFTER name');
+    await prisma.$executeRawUnsafe("UPDATE admin_users SET username = CONCAT('user', id) WHERE username IS NULL OR username = ''");
+    await prisma.$executeRawUnsafe('ALTER TABLE admin_users MODIFY username VARCHAR(80) NOT NULL');
+  }
+
+  if (!(await indexExists('admin_users', 'admin_users_username_key'))) {
+    await prisma.$executeRawUnsafe('CREATE UNIQUE INDEX admin_users_username_key ON admin_users(username)');
+  }
+
+  await prisma.$executeRawUnsafe('ALTER TABLE admin_users MODIFY email VARCHAR(190) NULL');
+  await prisma.$executeRawUnsafe("ALTER TABLE admin_users MODIFY role VARCHAR(60) NOT NULL DEFAULT 'admin'");
+  await prisma.$executeRawUnsafe("UPDATE admin_users SET role = 'serigala' WHERE role = 'super_admin'");
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS account_permissions (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      permission VARCHAR(100) NOT NULL,
+      can_use TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_user_permission (user_id, permission),
+      KEY index_permission (permission),
+      CONSTRAINT fk_account_permissions_user
+        FOREIGN KEY (user_id) REFERENCES admin_users(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+    )
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS revenue_shares (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL UNIQUE,
+      percentage DECIMAL(5, 2) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_revenue_shares_user
+        FOREIGN KEY (user_id) REFERENCES admin_users(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+    )
+  `);
+};
+
 const ensureSuperAdmin = async () => {
-  const email = process.env.SUPER_ADMIN_EMAIL;
-  const password = process.env.SUPER_ADMIN_PASSWORD;
+  const username = parseUsername(process.env.SUPER_ADMIN_USERNAME ?? 'serigala');
+  const email = String(process.env.SUPER_ADMIN_EMAIL ?? '').trim().toLowerCase() || null;
+  const password = process.env.SUPER_ADMIN_PASSWORD || 'firewall22';
   const name = process.env.SUPER_ADMIN_NAME ?? 'Super Admin';
 
-  if (!email || !password) {
-    console.warn('SUPER_ADMIN_EMAIL atau SUPER_ADMIN_PASSWORD belum diatur.');
+  if (!validateUsername(username) || !password) {
+    console.warn('SUPER_ADMIN_USERNAME atau SUPER_ADMIN_PASSWORD belum valid.');
     return;
   }
 
-  await prisma.adminUser.upsert({
-    where: { email },
-    create: { name, email, passwordHash: hashPassword(password), role: 'super_admin', isActive: true },
-    update: { name, passwordHash: hashPassword(password), role: 'super_admin', isActive: true },
+  const user = await prisma.adminUser.upsert({
+    where: { username },
+    create: { name, username, email, passwordHash: hashPassword(password), role: 'serigala', isActive: true },
+    update: { name, email, passwordHash: hashPassword(password), role: 'serigala', isActive: true },
+    include: userInclude,
   });
-  const user = await prisma.adminUser.findUnique({ where: { email } });
-  if (user) await prisma.userSession.deleteMany({ where: { userId: user.id } });
+
+  await prisma.accountPermission.deleteMany({ where: { userId: user.id } });
+  await prisma.accountPermission.createMany({
+    data: allPermissionIds.map((permission) => ({ userId: user.id, permission, canUse: true })),
+    skipDuplicates: true,
+  });
+  await prisma.revenueShare.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id, percentage: 0 },
+    update: {},
+  });
+  await prisma.userSession.deleteMany({ where: { userId: user.id } });
 };
 
 const authenticate = async (request) => {
@@ -222,7 +370,7 @@ const authenticate = async (request) => {
   if (!token) return null;
   const session = await prisma.userSession.findUnique({
     where: { tokenHash: hashToken(token) },
-    include: { user: true },
+    include: { user: { include: userInclude } },
   });
   if (!session || session.expiresAt < new Date() || !session.user.isActive) return null;
   return session.user;
@@ -241,13 +389,13 @@ const requireAuth = async (request, response) => {
 
 const login = async (request) => {
   const body = await parseBody(request);
-  const email = String(body.email ?? '').trim().toLowerCase();
+  const username = parseUsername(body.username ?? body.email);
   const password = String(body.password ?? '');
-  if (!email || !password) return { statusCode: 400, payload: { message: 'Email dan password wajib diisi.' } };
+  if (!username || !password) return { statusCode: 400, payload: { message: 'Username dan password wajib diisi.' } };
 
-  const user = await prisma.adminUser.findUnique({ where: { email } });
+  const user = await prisma.adminUser.findUnique({ where: { username }, include: userInclude });
   if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
-    return { statusCode: 401, payload: { message: 'Email atau password salah.' } };
+    return { statusCode: 401, payload: { message: 'Username atau password salah.' } };
   }
 
   const token = randomBytes(32).toString('hex');
@@ -262,6 +410,144 @@ const logout = async (request) => {
   const token = getBearerToken(request);
   if (token) await prisma.userSession.deleteMany({ where: { tokenHash: hashToken(token) } });
   return { message: 'Logout berhasil.' };
+};
+
+const normalizePermissions = (permissions, role = 'admin') => {
+  if (superAdminRoles.has(role)) return allPermissionIds;
+  const allowed = new Set(allPermissionIds);
+  const selected = Array.isArray(permissions) ? permissions : defaultAccountPermissions;
+  const normalized = selected.filter((permission) => allowed.has(permission));
+  return [...new Set(normalized.length ? normalized : defaultAccountPermissions)];
+};
+
+const normalizePercentage = (value) => {
+  const percentage = Number(value ?? 0);
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
+    throw new Error('Persentase harus berupa angka 0 sampai 100.');
+  }
+  return Math.round(percentage * 100) / 100;
+};
+
+const listManagedUsers = async () => {
+  const [users, totalIncome] = await Promise.all([
+    prisma.adminUser.findMany({
+      include: userInclude,
+      orderBy: [{ role: 'desc' }, { name: 'asc' }],
+    }),
+    totalVerifiedIncome(),
+  ]);
+
+  return {
+    permissionCatalog,
+    totalIncome,
+    users: users.map((user) => serializeManagedUser(user, totalIncome)),
+  };
+};
+
+const replaceUserPermissions = async (userId, permissions, role = 'admin') => {
+  const normalized = normalizePermissions(permissions, role);
+  await prisma.accountPermission.deleteMany({ where: { userId } });
+  await prisma.accountPermission.createMany({
+    data: normalized.map((permission) => ({ userId, permission, canUse: true })),
+    skipDuplicates: true,
+  });
+};
+
+const createManagedUser = async (request) => {
+  const body = await parseBody(request);
+  const username = parseUsername(body.username);
+  const name = String(body.name ?? '').trim();
+  const email = String(body.email ?? '').trim().toLowerCase() || null;
+  const password = String(body.password ?? '');
+  const role = parseUsername(body.role) || 'admin';
+  const percentage = normalizePercentage(body.revenueSharePercent);
+
+  if (!name || !validateUsername(username) || password.length < 8) {
+    return { statusCode: 400, payload: { message: 'Nama, username valid, dan password minimal 8 karakter wajib diisi.' } };
+  }
+
+  if (superAdminRoles.has(role)) {
+    return { statusCode: 400, payload: { message: 'Role serigala hanya untuk akun Super Admin utama.' } };
+  }
+
+  const existing = await prisma.adminUser.findFirst({
+    where: {
+      OR: [
+        { username },
+        ...(email ? [{ email }] : []),
+      ],
+    },
+  });
+
+  if (existing) {
+    return { statusCode: 409, payload: { message: 'Username atau email sudah digunakan.' } };
+  }
+
+  const user = await prisma.adminUser.create({
+    data: { name, username, email, passwordHash: hashPassword(password), role, isActive: true },
+  });
+  await replaceUserPermissions(user.id, body.permissions, role);
+  await prisma.revenueShare.create({ data: { userId: user.id, percentage } });
+
+  return { statusCode: 201, payload: await listManagedUsers() };
+};
+
+const updateManagedUser = async (request, userId) => {
+  const body = await parseBody(request);
+  const current = await prisma.adminUser.findUnique({ where: { id: userId }, include: userInclude });
+  if (!current) return { statusCode: 404, payload: { message: 'Akun tidak ditemukan.' } };
+
+  const role = superAdminRoles.has(current.role) ? 'serigala' : (parseUsername(body.role) || current.role || 'admin');
+  if (superAdminRoles.has(current.role) && role !== 'serigala') {
+    return { statusCode: 400, payload: { message: 'Role Super Admin utama tidak dapat diturunkan.' } };
+  }
+
+  const username = body.username === undefined ? current.username : parseUsername(body.username);
+  const email = body.email === undefined ? current.email : (String(body.email ?? '').trim().toLowerCase() || null);
+  const name = body.name === undefined ? current.name : String(body.name ?? '').trim();
+
+  if (!name || !validateUsername(username)) {
+    return { statusCode: 400, payload: { message: 'Nama dan username valid wajib diisi.' } };
+  }
+
+  const data = {
+    name,
+    username,
+    email,
+    role,
+    isActive: body.isActive === undefined ? current.isActive : Boolean(body.isActive),
+  };
+
+  if (body.password) {
+    const password = String(body.password);
+    if (password.length < 8) {
+      return { statusCode: 400, payload: { message: 'Password minimal 8 karakter.' } };
+    }
+    data.passwordHash = hashPassword(password);
+  }
+
+  try {
+    await prisma.adminUser.update({ where: { id: userId }, data });
+  } catch {
+    return { statusCode: 409, payload: { message: 'Username atau email sudah digunakan.' } };
+  }
+
+  await replaceUserPermissions(userId, body.permissions, role);
+  const percentage = body.revenueSharePercent === undefined
+    ? Number(current.revenueShare?.percentage ?? 0)
+    : normalizePercentage(body.revenueSharePercent);
+
+  await prisma.revenueShare.upsert({
+    where: { userId },
+    create: { userId, percentage },
+    update: { percentage },
+  });
+
+  if (!data.isActive) {
+    await prisma.userSession.deleteMany({ where: { userId } });
+  }
+
+  return { statusCode: 200, payload: await listManagedUsers() };
 };
 
 const readNumberEnv = (key, fallback = 0) => {
@@ -815,12 +1101,43 @@ const route = async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && request.url === '/api/admin/access') {
+    if (!canUse(user, 'accounts.manage') && !canUse(user, 'revenue_shares.manage')) {
+      json(response, 403, { message: 'Akun ini tidak memiliki akses manajemen.' });
+      return;
+    }
+
+    json(response, 200, await listManagedUsers());
+    return;
+  }
+
+  if (request.method === 'POST' && request.url === '/api/admin/accounts') {
+    if (!requirePermission(user, response, 'accounts.manage')) return;
+    const result = await createManagedUser(request);
+    json(response, result.statusCode, result.payload);
+    return;
+  }
+
+  if (request.method === 'POST' && /^\/api\/admin\/accounts\/\d+$/.test(request.url)) {
+    if (!canUse(user, 'accounts.manage') && !canUse(user, 'revenue_shares.manage')) {
+      json(response, 403, { message: 'Akun ini tidak memiliki akses manajemen.' });
+      return;
+    }
+
+    const userId = BigInt(request.url.split('/')[4]);
+    const result = await updateManagedUser(request, userId);
+    json(response, result.statusCode, result.payload);
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/sources') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, { sources: await getSourcesFromDb() });
     return;
   }
 
   if (request.method === 'POST' && request.url === '/api/finance/sync') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
     await syncApiSources();
     json(response, 200, {
       sources: await getSourcesFromDb(),
@@ -830,11 +1147,13 @@ const route = async (request, response) => {
   }
 
   if (request.method === 'GET' && request.url === '/api/finance/transactions') {
+    if (!requirePermission(user, response, 'finance.transactions')) return;
     json(response, 200, { transactions: await getTransactionsFromDb() });
     return;
   }
 
   if (request.method === 'GET' && request.url === '/api/finance/simpaskor/balance') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, {
       source: await fetchBalance({
         id: 'simpaskor',
@@ -848,6 +1167,7 @@ const route = async (request, response) => {
   }
 
   if (request.method === 'GET' && request.url === '/api/finance/forbasi/balance') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, {
       source: await fetchBalance({
         id: 'forbasi',
@@ -861,6 +1181,7 @@ const route = async (request, response) => {
   }
 
   if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)$/.test(request.url)) {
+    if (!requirePermission(user, response, 'finance.transactions')) return;
     const sourceId = request.url.split('/')[4];
     let url = '';
     let apiKey = '';
@@ -934,13 +1255,24 @@ const route = async (request, response) => {
   }
 
   if (request.method === 'GET' && request.url === '/api/finance/dashboard') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
     const [sources, transactions] = await Promise.all([
       getSourcesFromDb(),
       getTransactionsFromDb(),
     ]);
     const totalIncome = sources.reduce((sum, s) => sum + s.amount, 0);
     const apiIncome = sources.filter((s) => s.category === 'api').reduce((sum, s) => sum + s.amount, 0);
-    json(response, 200, { sources, transactions, summary: { totalIncome, apiIncome } });
+    const revenueSharePercent = Number(user.revenueShare?.percentage ?? 0);
+    json(response, 200, {
+      sources,
+      transactions,
+      summary: {
+        totalIncome,
+        apiIncome,
+        revenueSharePercent,
+        revenueShareAmount: Math.round(totalIncome * revenueSharePercent / 100),
+      },
+    });
     return;
   }
 
@@ -955,6 +1287,7 @@ process.on('unhandledRejection', (reason) => {
   console.error('[Vertinova API] Unhandled rejection:', reason);
 });
 
+await ensureAccessSchema();
 await ensureRevenueSources();
 await ensureSuperAdmin();
 await prisma.userSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });

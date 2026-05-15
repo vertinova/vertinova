@@ -50,13 +50,14 @@ import logo from '../logo-vertinova.png';
 
 type SourceId = 'simpaskor' | 'forbasi' | 'desa' | 'sekolah' | 'swasta';
 type ApiSourceId = Extract<SourceId, 'simpaskor' | 'forbasi'>;
-type ViewId = 'dashboard' | 'transactions' | 'reports';
+type ViewId = 'dashboard' | 'transactions' | 'reports' | 'accounts' | 'revenueShares';
 type NavItem = {
   id: ViewId;
   label: string;
   description: string;
   icon: LucideIcon;
-  group: 'Monitor' | 'Operasional';
+  group: 'Monitor' | 'Operasional' | 'Akses';
+  permission: string;
 };
 
 type RevenueSource = {
@@ -108,8 +109,29 @@ type TransactionDetailState = Record<ApiSourceId, { error: string; isLoading: bo
 type AdminUser = {
   id: number;
   name: string;
-  email: string;
-  role: 'super_admin' | 'admin';
+  username: string;
+  email?: string | null;
+  role: string;
+  permissions: string[];
+  revenueSharePercent: number;
+};
+
+type PermissionCatalogItem = {
+  id: string;
+  label: string;
+  feature: string;
+};
+
+type ManagedUser = AdminUser & {
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  revenueShareAmount: number;
+};
+
+type AccessPayload = {
+  permissionCatalog: PermissionCatalogItem[];
+  totalIncome: number;
+  users: ManagedUser[];
 };
 
 const baseSources: RevenueSource[] = [
@@ -182,6 +204,7 @@ const navItems: NavItem[] = [
     description: 'Saldo dan kondisi utama',
     icon: LineChart,
     group: 'Monitor',
+    permission: 'finance.dashboard',
   },
   {
     id: 'transactions',
@@ -189,6 +212,7 @@ const navItems: NavItem[] = [
     description: 'Detail Simpaskor dan Forbasi',
     icon: BadgeCheck,
     group: 'Operasional',
+    permission: 'finance.transactions',
   },
   {
     id: 'reports',
@@ -196,10 +220,27 @@ const navItems: NavItem[] = [
     description: 'CSV sumber dan transaksi',
     icon: Download,
     group: 'Operasional',
+    permission: 'finance.reports',
+  },
+  {
+    id: 'accounts',
+    label: 'Akun',
+    description: 'Role dan permission',
+    icon: ShieldCheck,
+    group: 'Akses',
+    permission: 'accounts.manage',
+  },
+  {
+    id: 'revenueShares',
+    label: 'Persentase',
+    description: 'Pembagian pendapatan',
+    icon: WalletCards,
+    group: 'Akses',
+    permission: 'revenue_shares.manage',
   },
 ];
 
-const navGroups: NavItem['group'][] = ['Monitor', 'Operasional'];
+const navGroups: NavItem['group'][] = ['Monitor', 'Operasional', 'Akses'];
 
 const emptyTransactionDetails: TransactionDetailState = {
   simpaskor: { error: '', isLoading: false, items: [] },
@@ -258,10 +299,16 @@ function App() {
   const [isBooting, setIsBooting] = useState(true);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('vertinova_token') ?? '');
   const [user, setUser] = useState<AdminUser | null>(null);
+  const [accessData, setAccessData] = useState<AccessPayload | null>(null);
+  const [isAccessLoading, setIsAccessLoading] = useState(false);
   const [syncMessage, setSyncMessage] = useState('Menunggu koneksi API saldo masuk.');
   const [notice, setNotice] = useState('Dashboard siap digunakan.');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const isAdminPath = routePath.startsWith('/admin');
+  const allowedNavItems = useMemo(
+    () => navItems.filter((item) => user?.permissions.includes(item.permission)),
+    [user],
+  );
 
   useEffect(() => {
     const handleRouteChange = () => setRoutePath(window.location.pathname);
@@ -334,6 +381,27 @@ function App() {
     }
   }, [authedFetch, mergeApiSources]);
 
+  const loadAccessData = useCallback(async () => {
+    if (!authToken) return;
+    setIsAccessLoading(true);
+
+    try {
+      const response = await authedFetch('/api/admin/access');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.message ?? 'Data akses belum bisa dimuat.');
+      }
+
+      const payload = (await response.json()) as AccessPayload;
+      setAccessData(payload);
+      setNotice('Data akun dan pembagian persentase dimuat.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Data akses belum bisa dimuat.');
+    } finally {
+      setIsAccessLoading(false);
+    }
+  }, [authToken, authedFetch]);
+
   const syncApiSources = useCallback(async () => {
     setIsSyncing(true);
     setSyncMessage('Mengambil saldo dari API lalu menyimpan ke database lokal...');
@@ -392,12 +460,22 @@ function App() {
     void boot();
   }, [authToken, authedFetch, isAdminPath, loadFinanceData]);
 
+  useEffect(() => {
+    if (!user || allowedNavItems.some((item) => item.id === activeView)) return;
+    setActiveView(allowedNavItems[0]?.id ?? 'dashboard');
+  }, [activeView, allowedNavItems, user]);
+
+  useEffect(() => {
+    if (!user || !['accounts', 'revenueShares'].includes(activeView)) return;
+    void loadAccessData();
+  }, [activeView, loadAccessData, user]);
+
   const handleLogin = useCallback(
-    async (email: string, password: string) => {
+    async (username: string, password: string) => {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
       const payload = await response.json();
 
@@ -493,7 +571,7 @@ function App() {
     setNotice('CSV transaksi dibuat.');
   };
 
-  const activeNav = navItems.find((item) => item.id === activeView) ?? navItems[0];
+  const activeNav = allowedNavItems.find((item) => item.id === activeView) ?? allowedNavItems[0] ?? navItems[0];
   const activeLabel = activeNav.label;
   const activeSubtitle = activeNav.description;
 
@@ -529,29 +607,32 @@ function App() {
         </div>
 
         <nav className="nav-list">
-          {navGroups.map((group) => (
-            <div className="nav-group" key={group}>
-              <span className="nav-group-label">{group}</span>
-              {navItems
-                .filter((item) => item.group === group)
-                .map(({ id, label, description, icon: Icon }) => (
-                  <button
-                    className={activeView === id ? 'active' : ''}
-                    key={id}
-                    onClick={() => {
-                      setActiveView(id);
-                      setSidebarOpen(false);
-                    }}
-                  >
-                    <Icon size={18} />
-                    <span>
-                      <strong>{label}</strong>
-                      <small>{description}</small>
-                    </span>
-                  </button>
-                ))}
-            </div>
-          ))}
+          {navGroups.map((group) => {
+            const items = allowedNavItems.filter((item) => item.group === group);
+            if (items.length === 0) return null;
+
+            return (
+              <div className="nav-group" key={group}>
+                <span className="nav-group-label">{group}</span>
+                {items.map(({ id, label, description, icon: Icon }) => (
+                    <button
+                      className={activeView === id ? 'active' : ''}
+                      key={id}
+                      onClick={() => {
+                        setActiveView(id);
+                        setSidebarOpen(false);
+                      }}
+                    >
+                      <Icon size={18} />
+                      <span>
+                        <strong>{label}</strong>
+                        <small>{description}</small>
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="sidebar-card">
@@ -593,7 +674,7 @@ function App() {
             <button className="icon-button" aria-label={notice} title={notice} onClick={() => setNotice(syncMessage)}>
               <Bell size={20} />
             </button>
-            <button className="ghost-button user-button" title={user.email}>
+            <button className="ghost-button user-button" title={user.username}>
               <UserRound size={17} />
               {user.name}
             </button>
@@ -620,6 +701,7 @@ function App() {
             syncMessage={syncMessage}
             totalIncome={totalIncome}
             transactions={transactions}
+            user={user}
             verifiedCount={verifiedCount}
             onExportTransactions={exportTransactions}
           />
@@ -646,10 +728,59 @@ function App() {
             onExportTransactions={exportTransactions}
           />
         ) : null}
+
+        {activeView === 'accounts' ? (
+          <AccountsView
+            accessData={accessData}
+            isLoading={isAccessLoading}
+            onReload={loadAccessData}
+            onSave={async (payload) => {
+              const response = await authedFetch('/api/admin/accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message ?? 'Akun gagal dibuat.');
+              setAccessData(data);
+              setNotice('Akun baru berhasil dibuat.');
+            }}
+            onUpdate={async (accountId, payload) => {
+              const response = await authedFetch(`/api/admin/accounts/${accountId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message ?? 'Akun gagal diperbarui.');
+              setAccessData(data);
+              setNotice('Akun berhasil diperbarui.');
+            }}
+          />
+        ) : null}
+
+        {activeView === 'revenueShares' ? (
+          <RevenueSharesView
+            accessData={accessData}
+            isLoading={isAccessLoading}
+            onReload={loadAccessData}
+            onUpdate={async (accountId, payload) => {
+              const response = await authedFetch(`/api/admin/accounts/${accountId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              const data = await response.json();
+              if (!response.ok) throw new Error(data.message ?? 'Persentase gagal diperbarui.');
+              setAccessData(data);
+              setNotice('Pembagian persentase berhasil diperbarui.');
+            }}
+          />
+        ) : null}
       </section>
 
       <nav className="bottom-nav" aria-label="Navigasi utama mobile">
-        {navItems.map(({ id, label, icon: Icon }) => (
+        {allowedNavItems.map(({ id, label, icon: Icon }) => (
           <button
             aria-label={label}
             aria-current={activeView === id ? 'page' : undefined}
@@ -678,6 +809,7 @@ function DashboardView({
   syncMessage,
   totalIncome,
   transactions,
+  user,
   verifiedCount,
   onExportTransactions,
 }: {
@@ -690,6 +822,7 @@ function DashboardView({
   syncMessage: string;
   totalIncome: number;
   transactions: Transaction[];
+  user: AdminUser;
   verifiedCount: number;
   onExportTransactions: () => void;
 }) {
@@ -701,6 +834,7 @@ function DashboardView({
   const simpaskorPct = totalIncome > 0 ? (simpaskor?.amount ?? 0) / totalIncome * 100 : 0;
   const forbasiPct = totalIncome > 0 ? (forbasi?.amount ?? 0) / totalIncome * 100 : 0;
   const manualPct = Math.max(0, 100 - simpaskorPct - forbasiPct);
+  const accountIncome = Math.round(totalIncome * (user.revenueSharePercent ?? 0) / 100);
 
   return (
     <>
@@ -741,6 +875,11 @@ function DashboardView({
             <BadgeCheck size={18} />
             <strong>{verifiedCount}/{transactions.length}</strong>
             <span>Terverifikasi</span>
+          </div>
+          <div className="db-stat">
+            <WalletCards size={18} />
+            <strong>{formatCurrency(accountIncome)}</strong>
+            <span>Bagian Anda {user.revenueSharePercent ?? 0}%</span>
           </div>
         </div>
       </motion.section>
@@ -1297,8 +1436,286 @@ function ReportsView({
   );
 }
 
-function LoginView({ onLogin }: { onLogin: (email: string, password: string) => Promise<void> }) {
-  const [email, setEmail] = useState('admin@vertinova.id');
+function AccountsView({
+  accessData,
+  isLoading,
+  onReload,
+  onSave,
+  onUpdate,
+}: {
+  accessData: AccessPayload | null;
+  isLoading: boolean;
+  onReload: () => void;
+  onSave: (payload: Record<string, unknown>) => Promise<void>;
+  onUpdate: (accountId: number, payload: Record<string, unknown>) => Promise<void>;
+}) {
+  const permissionCatalog = accessData?.permissionCatalog ?? [];
+  const [form, setForm] = useState({
+    name: '',
+    username: '',
+    email: '',
+    password: '',
+    role: 'admin',
+    revenueSharePercent: 0,
+    permissions: ['finance.dashboard'],
+  });
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const togglePermission = (permission: string) => {
+    setForm((current) => ({
+      ...current,
+      permissions: current.permissions.includes(permission)
+        ? current.permissions.filter((item) => item !== permission)
+        : [...current.permissions, permission],
+    }));
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setIsSaving(true);
+
+    try {
+      await onSave(form);
+      setForm({ name: '', username: '', email: '', password: '', role: 'admin', revenueSharePercent: 0, permissions: ['finance.dashboard'] });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Akun gagal dibuat.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <section className="management-grid">
+      <form className="panel management-form" onSubmit={submit}>
+        <PanelTitle eyebrow="Akses" title="Buat akun baru" />
+        <div className="form-grid">
+          <label className="form-field">
+            <span>Nama</span>
+            <div><UserRound size={18} /><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></div>
+          </label>
+          <label className="form-field">
+            <span>Username</span>
+            <div><ShieldCheck size={18} /><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="contoh: akun-a" required /></div>
+          </label>
+          <label className="form-field">
+            <span>Email opsional</span>
+            <div><Mail size={18} /><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div>
+          </label>
+          <label className="form-field">
+            <span>Password</span>
+            <div><LockKeyhole size={18} /><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} minLength={8} required /></div>
+          </label>
+          <label className="form-field">
+            <span>Role</span>
+            <div><Layers3 size={18} /><input value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} /></div>
+          </label>
+          <label className="form-field">
+            <span>Persentase</span>
+            <div><WalletCards size={18} /><input type="number" min="0" max="100" step="0.01" value={form.revenueSharePercent} onChange={(event) => setForm({ ...form, revenueSharePercent: Number(event.target.value) })} /></div>
+          </label>
+        </div>
+        <PermissionChecklist catalog={permissionCatalog} selected={form.permissions} onToggle={togglePermission} />
+        {error ? <div className="form-error">{error}</div> : null}
+        <button className="primary-button" disabled={isSaving || isLoading}>
+          {isSaving ? <Loader2 size={18} className="spin-icon" /> : <ShieldCheck size={18} />}
+          Buat akun
+        </button>
+      </form>
+
+      <section className="panel">
+        <PanelTitle
+          eyebrow="Akun"
+          title="Role dan permission"
+          action={<button className="ghost-button" onClick={onReload} disabled={isLoading}>{isLoading ? 'Memuat...' : 'Refresh'}</button>}
+        />
+        <div className="management-list">
+          {(accessData?.users ?? []).map((account) => (
+            <AccountEditor key={account.id} account={account} catalog={permissionCatalog} onUpdate={onUpdate} />
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function PermissionChecklist({
+  catalog,
+  selected,
+  onToggle,
+}: {
+  catalog: PermissionCatalogItem[];
+  selected: string[];
+  onToggle: (permission: string) => void;
+}) {
+  return (
+    <div className="permission-grid">
+      {catalog.map((permission) => (
+        <label key={permission.id} className="permission-item">
+          <input type="checkbox" checked={selected.includes(permission.id)} onChange={() => onToggle(permission.id)} />
+          <span>{permission.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function AccountEditor({
+  account,
+  catalog,
+  onUpdate,
+}: {
+  account: ManagedUser;
+  catalog: PermissionCatalogItem[];
+  onUpdate: (accountId: number, payload: Record<string, unknown>) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState({
+    name: account.name,
+    username: account.username,
+    email: account.email ?? '',
+    role: account.role,
+    isActive: account.isActive,
+    password: '',
+    revenueSharePercent: account.revenueSharePercent,
+    permissions: account.permissions,
+  });
+  const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  const togglePermission = (permission: string) => {
+    setDraft((current) => ({
+      ...current,
+      permissions: current.permissions.includes(permission)
+        ? current.permissions.filter((item) => item !== permission)
+        : [...current.permissions, permission],
+    }));
+  };
+
+  const save = async () => {
+    setError('');
+    setIsSaving(true);
+    try {
+      await onUpdate(account.id, draft);
+      setDraft((current) => ({ ...current, password: '' }));
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Akun gagal diperbarui.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <article className="account-card">
+      <div className="account-card-head">
+        <div>
+          <strong>{account.name}</strong>
+          <span>@{account.username} · {account.role}</span>
+        </div>
+        <span className={account.isActive ? 'status-pill success' : 'status-pill neutral'}>{account.isActive ? 'Aktif' : 'Nonaktif'}</span>
+      </div>
+      <div className="form-grid compact">
+        <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} aria-label="Nama" />
+        <input value={draft.username} onChange={(event) => setDraft({ ...draft, username: event.target.value })} aria-label="Username" />
+        <input value={draft.role} onChange={(event) => setDraft({ ...draft, role: event.target.value })} aria-label="Role" disabled={account.role === 'serigala'} />
+        <input type="password" value={draft.password} onChange={(event) => setDraft({ ...draft, password: event.target.value })} placeholder="Password baru opsional" aria-label="Password baru" />
+      </div>
+      <label className="toggle-row">
+        <input type="checkbox" checked={draft.isActive} onChange={(event) => setDraft({ ...draft, isActive: event.target.checked })} disabled={account.role === 'serigala'} />
+        Akun aktif
+      </label>
+      <PermissionChecklist catalog={catalog} selected={draft.permissions} onToggle={togglePermission} />
+      {error ? <div className="form-error">{error}</div> : null}
+      <button className="ghost-button" onClick={save} disabled={isSaving}>
+        {isSaving ? <Loader2 size={17} className="spin-icon" /> : <CheckCircle2 size={17} />}
+        Simpan akses
+      </button>
+    </article>
+  );
+}
+
+function RevenueSharesView({
+  accessData,
+  isLoading,
+  onReload,
+  onUpdate,
+}: {
+  accessData: AccessPayload | null;
+  isLoading: boolean;
+  onReload: () => void;
+  onUpdate: (accountId: number, payload: Record<string, unknown>) => Promise<void>;
+}) {
+  return (
+    <section className="panel">
+      <PanelTitle
+        eyebrow="Pembagian"
+        title="Persentase pendapatan"
+        action={<button className="ghost-button" onClick={onReload} disabled={isLoading}>{isLoading ? 'Memuat...' : 'Refresh'}</button>}
+      />
+      <div className="share-summary">
+        <span>Total pendapatan</span>
+        <strong>{formatCurrency(accessData?.totalIncome ?? 0)}</strong>
+      </div>
+      <div className="management-list">
+        {(accessData?.users ?? []).map((account) => (
+          <RevenueShareEditor key={account.id} account={account} totalIncome={accessData?.totalIncome ?? 0} onUpdate={onUpdate} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RevenueShareEditor({
+  account,
+  totalIncome,
+  onUpdate,
+}: {
+  account: ManagedUser;
+  totalIncome: number;
+  onUpdate: (accountId: number, payload: Record<string, unknown>) => Promise<void>;
+}) {
+  const [percentage, setPercentage] = useState(account.revenueSharePercent);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const amount = Math.round(totalIncome * percentage / 100);
+
+  const save = async () => {
+    setError('');
+    setIsSaving(true);
+    try {
+      await onUpdate(account.id, { revenueSharePercent: percentage, permissions: account.permissions, role: account.role });
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Persentase gagal disimpan.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <article className="share-card">
+      <div>
+        <strong>{account.name}</strong>
+        <span>@{account.username}</span>
+      </div>
+      <label>
+        <span>Persentase</span>
+        <input type="number" min="0" max="100" step="0.01" value={percentage} onChange={(event) => setPercentage(Number(event.target.value))} />
+      </label>
+      <div>
+        <span>Hasil</span>
+        <strong>{formatCurrency(amount)}</strong>
+      </div>
+      {error ? <div className="form-error">{error}</div> : null}
+      <button className="ghost-button" onClick={save} disabled={isSaving}>
+        {isSaving ? <Loader2 size={17} className="spin-icon" /> : <CheckCircle2 size={17} />}
+        Simpan
+      </button>
+    </article>
+  );
+}
+
+function LoginView({ onLogin }: { onLogin: (username: string, password: string) => Promise<void> }) {
+  const [username, setUsername] = useState('serigala');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1309,7 +1726,7 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
     setIsSubmitting(true);
 
     try {
-      await onLogin(email, password);
+      await onLogin(username, password);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Login gagal.');
     } finally {
@@ -1333,15 +1750,15 @@ function LoginView({ onLogin }: { onLogin: (email: string, password: string) => 
         </div>
 
         <label className="form-field">
-          <span>Email</span>
+          <span>Username</span>
           <div>
-            <Mail size={18} />
+            <UserRound size={18} />
             <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="admin@vertinova.id"
-              autoComplete="email"
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="serigala"
+              autoComplete="username"
               required
             />
           </div>
