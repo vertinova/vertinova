@@ -334,6 +334,24 @@ const ensureAccessSchema = async () => {
   `);
 };
 
+const ensureAdminFeeSchema = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS admin_fees (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      order_id VARCHAR(120) NOT NULL UNIQUE,
+      amount DECIMAL(18, 2) NOT NULL,
+      paid_at DATETIME NOT NULL,
+      description VARCHAR(255) NOT NULL,
+      source VARCHAR(40) NULL,
+      raw_payload JSON NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY index_admin_fees_paid_at (paid_at),
+      KEY index_admin_fees_source_paid_at (source, paid_at)
+    )
+  `);
+};
+
 const ensureSuperAdmin = async () => {
   const username = parseUsername(process.env.SUPER_ADMIN_USERNAME ?? 'serigala');
   const email = String(process.env.SUPER_ADMIN_EMAIL ?? '').trim().toLowerCase() || null;
@@ -599,6 +617,7 @@ const readNumberEnv = (key, fallback = 0) => {
 };
 
 const getConfiguredApiKey = (sourceId) => {
+  if (sourceId === 'simpaskor-admin-fee') return process.env.SIMPASKOR_ADMIN_FEE_API_KEY ?? process.env.SIMPASKOR_API_KEY ?? '';
   if (sourceId === 'simpaskor') return process.env.SIMPASKOR_API_KEY ?? '';
   if (sourceId === 'forbasi') return process.env.FORBASI_API_KEY ?? '';
   return '';
@@ -1014,6 +1033,252 @@ const sourceNames = {
   forbasi: 'Forbasi',
 };
 
+const normalizeAdminFeeSource = (value) => {
+  const source = String(value ?? '').trim();
+  return source ? source.toLowerCase().slice(0, 40) : null;
+};
+
+const extractAdminFeeOrderId = (payload) => {
+  const orderId = firstPresent(
+    payload?.orderId,
+    payload?.order_id,
+    payload?.midtransOrderId,
+    payload?.midtrans_order_id,
+    payload?.transactionId,
+    payload?.transaction_id,
+    payload?.paymentId,
+    payload?.payment_id,
+    payload?.invoiceId,
+    payload?.invoice_id,
+    payload?.id,
+  );
+  return String(orderId ?? '').trim();
+};
+
+const extractAdminFeeRowAmount = (payload) =>
+  firstFiniteAmount(
+    payload?.adminFee,
+    payload?.admin_fee,
+    payload?.adminFeeAmount,
+    payload?.admin_fee_amount,
+    payload?.fee,
+    payload?.amount,
+    payload?.totalAdminFee,
+    payload?.total_admin_fee,
+  );
+
+const inferAdminFeeSource = (payload, fallbackSource = null) => {
+  const explicit = normalizeAdminFeeSource(firstPresent(payload?.source, payload?.type, payload?.kind, payload?.category));
+  if (explicit) return explicit;
+
+  const orderId = extractAdminFeeOrderId(payload).toLowerCase();
+  const description = String(payload?.description ?? '').toLowerCase();
+  const text = `${orderId} ${description}`;
+
+  if (text.includes('vote') || text.includes('voting')) return 'voting';
+  if (text.includes('ticket') || text.includes('tiket')) return 'ticket';
+  if (text.includes('registration') || text.includes('registrasi') || text.includes('pendaftaran')) return 'registration';
+  if (text.includes('kta')) return 'kta';
+
+  return normalizeAdminFeeSource(fallbackSource);
+};
+
+const extractAdminFeeRows = (payload) => {
+  const groupRoots = [payload?.details, payload?.data?.details, payload?.result?.details].filter(Boolean);
+  const groupedRows = groupRoots.flatMap((details) => [
+    ...(Array.isArray(details?.tickets) ? details.tickets.map((row) => ({ row, source: 'ticket' })) : []),
+    ...(Array.isArray(details?.voting) ? details.voting.map((row) => ({ row, source: 'voting' })) : []),
+    ...(Array.isArray(details?.registrations) ? details.registrations.map((row) => ({ row, source: 'registration' })) : []),
+    ...(Array.isArray(details?.kta) ? details.kta.map((row) => ({ row, source: 'kta' })) : []),
+  ]);
+
+  if (groupedRows.length > 0) {
+    return groupedRows;
+  }
+
+  const rows = [
+    payload?.items,
+    payload?.transactions,
+    payload?.data?.items,
+    payload?.data?.transactions,
+    payload?.result?.items,
+    payload?.result?.transactions,
+  ].find(Array.isArray);
+
+  if (rows) {
+    return rows.map((row) => ({ row, source: null }));
+  }
+
+  return [{ row: payload, source: null }];
+};
+
+const normalizeAdminFeeEntries = (payload) =>
+  extractAdminFeeRows(payload)
+    .map(({ row, source }) => {
+      const orderId = extractAdminFeeOrderId(row);
+      const amount = extractAdminFeeRowAmount(row);
+      return {
+        row,
+        orderId,
+        amount,
+        paidAt: extractOccurredAt(row),
+        description: extractDescription('Simpaskor', row),
+        source: inferAdminFeeSource(row, source),
+      };
+    })
+    .filter((entry) => entry.orderId && Number.isFinite(entry.amount) && entry.amount > 0);
+
+const syncSimpaskorAdminFeeBalance = async () => {
+  const aggregate = await prisma.adminFee.aggregate({
+    _sum: { amount: true },
+  });
+  const amount = Number(aggregate._sum.amount ?? 0);
+  await prisma.revenueSource.update({
+    where: { id: 'simpaskor' },
+    data: {
+      currentBalance: amount,
+      status: amount > 0 ? 'sinkron' : 'api_belum_terhubung',
+      lastSyncedAt: amount > 0 ? new Date() : undefined,
+    },
+  });
+  return amount;
+};
+
+const applySimpaskorAdminFees = async (payload, { writeLog = true } = {}) => {
+  const entries = normalizeAdminFeeEntries(payload);
+
+  if (entries.length === 0) {
+    if (writeLog) {
+      await prisma.apiSyncLog.create({
+        data: {
+          sourceId: 'simpaskor',
+          status: 'failed',
+          message: 'Webhook Simpaskor diterima tanpa order_id dan nominal admin fee valid.',
+          responsePayload: payload,
+        },
+      });
+    }
+    return { inserted: 0, total: 0, currentTotal: await getCurrentSourceAmount('simpaskor') };
+  }
+
+  let total = 0;
+  for (const entry of entries) {
+    total += entry.amount;
+    await prisma.adminFee.upsert({
+      where: { orderId: entry.orderId },
+      create: {
+        orderId: entry.orderId,
+        amount: entry.amount,
+        paidAt: entry.paidAt,
+        description: entry.description,
+        source: entry.source,
+        rawPayload: entry.row,
+      },
+      update: {
+        amount: entry.amount,
+        paidAt: entry.paidAt,
+        description: entry.description,
+        source: entry.source,
+        rawPayload: entry.row,
+      },
+    });
+
+    await prisma.financeTransaction.upsert({
+      where: { unique_source_external_id: { sourceId: 'simpaskor', externalId: entry.orderId } },
+      create: {
+        sourceId: 'simpaskor',
+        externalId: entry.orderId,
+        direction: 'income',
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.paidAt,
+        rawPayload: entry.row,
+      },
+      update: {
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.paidAt,
+        rawPayload: entry.row,
+      },
+    });
+  }
+
+  const currentTotal = await syncSimpaskorAdminFeeBalance();
+
+  if (writeLog) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId: 'simpaskor',
+        status: 'success',
+        message: `Admin fee Simpaskor menyimpan ${entries.length} transaksi.`,
+        responsePayload: payload,
+      },
+    });
+  }
+
+  return { inserted: entries.length, total, currentTotal };
+};
+
+const getAdminFeeDateFilter = (searchParams) => {
+  const where = {};
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const source = normalizeAdminFeeSource(searchParams.get('source'));
+
+  if (source) {
+    where.source = source;
+  }
+
+  if (from || to) {
+    where.paidAt = {};
+    if (from) where.paidAt.gte = normalizeDate(from);
+    if (to) {
+      const toDate = normalizeDate(to);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        toDate.setHours(23, 59, 59, 999);
+      }
+      where.paidAt.lte = toDate;
+    }
+  }
+
+  return where;
+};
+
+const listSimpaskorAdminFees = async (searchParams = new URLSearchParams()) => {
+  const where = getAdminFeeDateFilter(searchParams);
+  const [rows, aggregate] = await Promise.all([
+    prisma.adminFee.findMany({
+      where,
+      orderBy: { paidAt: 'desc' },
+    }),
+    prisma.adminFee.aggregate({
+      where,
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+  ]);
+
+  const items = rows.map((row) => ({
+    id: String(row.id),
+    type: row.source ?? 'admin_fee',
+    title: row.description,
+    subtitle: row.source ?? '',
+    quantity: 1,
+    adminFee: Number(row.amount),
+    paidAt: row.paidAt,
+    orderId: row.orderId,
+  }));
+
+  return {
+    sourceId: 'simpaskor',
+    items,
+    total: Number(aggregate._sum.amount ?? 0),
+    count: aggregate._count.id,
+  };
+};
+
 const applyWebhookTransactions = async (sourceId, payload) => {
   const sourceName = sourceNames[sourceId] ?? sourceId;
   const rows = extractWebhookRows(payload);
@@ -1134,15 +1399,24 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
       return result;
     }
 
+    const syncedAdminFees = id === 'simpaskor'
+      ? await applySimpaskorAdminFees(payload, { writeLog: false })
+      : null;
+    const amount = syncedAdminFees?.inserted > 0
+      ? syncedAdminFees.currentTotal
+      : extractBalanceAmount(id, payload);
+
     const result = {
       id,
-      amount: extractBalanceAmount(id, payload),
+      amount,
       status: 'Sinkron',
       lastSync: new Date().toISOString(),
       message: `Saldo ${name} berhasil disinkronkan dari API.`,
     };
     await updateSourceSync({ ...result, payload });
-    await createSyncTransaction(id, name, result.amount);
+    if (id !== 'simpaskor') {
+      await createSyncTransaction(id, name, result.amount);
+    }
     return result;
   } catch (error) {
     const result = {
@@ -1231,14 +1505,17 @@ const route = async (request, response) => {
   if (request.method === 'POST' && /^\/api\/finance\/webhooks\/(simpaskor|forbasi)$/.test(request.url)) {
     const sourceId = request.url.split('/')[4];
 
-    if (!verifyExternalApiKey(request, sourceId)) {
+    const apiKeySourceId = sourceId === 'simpaskor' ? 'simpaskor-admin-fee' : sourceId;
+    if (!verifyExternalApiKey(request, apiKeySourceId)) {
       json(response, 401, { message: `API key webhook ${sourceId} tidak valid.` });
       return;
     }
 
     try {
       const payload = await parseBody(request);
-      const result = await applyWebhookTransactions(sourceId, payload);
+      const result = sourceId === 'simpaskor'
+        ? await applySimpaskorAdminFees(payload)
+        : await applyWebhookTransactions(sourceId, payload);
       json(response, 200, {
         ok: true,
         sourceId,
@@ -1336,6 +1613,14 @@ const route = async (request, response) => {
     return;
   }
 
+  const currentUrl = new URL(request.url, localApiBaseUrl);
+
+  if (request.method === 'GET' && currentUrl.pathname === '/api/finance/admin-fees') {
+    if (!requirePermission(user, response, 'finance.transactions')) return;
+    json(response, 200, await listSimpaskorAdminFees(currentUrl.searchParams));
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/simpaskor/balance') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, {
@@ -1367,6 +1652,12 @@ const route = async (request, response) => {
   if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)$/.test(request.url)) {
     if (!requirePermission(user, response, 'finance.transactions')) return;
     const sourceId = request.url.split('/')[4];
+
+    if (sourceId === 'simpaskor') {
+      json(response, 200, await listSimpaskorAdminFees());
+      return;
+    }
+
     let url = '';
     let apiKey = '';
     let apiKeyHeader = 'X-API-Key';
@@ -1472,7 +1763,9 @@ process.on('unhandledRejection', (reason) => {
 });
 
 await ensureAccessSchema();
+await ensureAdminFeeSchema();
 await ensureRevenueSources();
+await syncSimpaskorAdminFeeBalance();
 await ensureSuperAdmin();
 await prisma.userSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
 

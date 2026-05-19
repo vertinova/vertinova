@@ -59,6 +59,22 @@ model ApiSyncLog {
   @@map("api_sync_logs")
 }
 
+model AdminFee {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  orderId     String   @unique @map("order_id") @db.VarChar(120)
+  amount      Decimal  @db.Decimal(18, 2)
+  paidAt      DateTime @map("paid_at")
+  description String   @db.VarChar(255)
+  source      String?  @db.VarChar(40)
+  rawPayload  Json?    @map("raw_payload")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([paidAt], name: "index_admin_fees_paid_at")
+  @@index([source, paidAt], name: "index_admin_fees_source_paid_at")
+  @@map("admin_fees")
+}
+
 model AdminUser {
   id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   name         String   @db.VarChar(120)
