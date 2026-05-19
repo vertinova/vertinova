@@ -901,10 +901,13 @@ const isPaymentConfigUrl = (url) => {
 
 const buildSimpaskorUrl = (baseUrl) => {
   if (!baseUrl) return '';
-  const year = new Date().getFullYear();
   const url = new URL(resolveApiUrl(baseUrl));
-  url.searchParams.set('from', `${year}-01-01`);
-  url.searchParams.set('to', `${year}-12-31`);
+  if (process.env.SIMPASKOR_BALANCE_FROM) {
+    url.searchParams.set('from', process.env.SIMPASKOR_BALANCE_FROM);
+  }
+  if (process.env.SIMPASKOR_BALANCE_TO) {
+    url.searchParams.set('to', process.env.SIMPASKOR_BALANCE_TO);
+  }
   url.searchParams.set('includeDetails', 'true');
   return url.toString();
 };
