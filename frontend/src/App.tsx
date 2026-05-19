@@ -1222,9 +1222,23 @@ function TransactionsView({
   const apiSources = sources.filter((source): source is RevenueSource & { id: ApiSourceId } =>
     source.id === 'simpaskor' || source.id === 'forbasi',
   );
-  const totalApiAmount = apiSources.reduce((sum, source) => sum + source.amount, 0);
+  const apiTransactions = transactions.filter(
+    (transaction) => transaction.sourceId === 'simpaskor' || transaction.sourceId === 'forbasi',
+  );
+  const totalApiAmount = apiTransactions.length > 0
+    ? apiTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)
+    : apiSources.reduce((sum, source) => sum + source.amount, 0);
   const verifiedTransactions = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
-  const sourceTotals = Object.fromEntries(apiSources.map((source) => [source.id, source.amount])) as Record<ApiSourceId, number>;
+  const apiSourceFallbackTotals = Object.fromEntries(apiSources.map((source) => [source.id, source.amount])) as Record<ApiSourceId, number>;
+  const sourceTotals = Object.fromEntries(
+    sourceConfigs.map((source) => {
+      const transactionTotal = transactions
+        .filter((transaction) => transaction.sourceId === source.id)
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+      return [source.id, transactionTotal || apiSourceFallbackTotals[source.id] || 0];
+    }),
+  ) as Record<ApiSourceId, number>;
 
   return (
     <section className="transactions-page">

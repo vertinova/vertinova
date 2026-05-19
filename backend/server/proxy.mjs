@@ -235,6 +235,14 @@ const totalVerifiedIncome = async () => {
   return Number(result._sum.amount ?? 0);
 };
 
+const totalIncomeBySource = async (sourceId) => {
+  const result = await prisma.financeTransaction.aggregate({
+    where: { sourceId, direction: 'income' },
+    _sum: { amount: true },
+  });
+  return Number(result._sum.amount ?? 0);
+};
+
 const userInclude = {
   permissions: true,
   revenueShare: true,
@@ -1129,10 +1137,7 @@ const normalizeAdminFeeEntries = (payload) =>
     .filter((entry) => entry.orderId && Number.isFinite(entry.amount) && entry.amount > 0);
 
 const syncSimpaskorAdminFeeBalance = async () => {
-  const aggregate = await prisma.adminFee.aggregate({
-    _sum: { amount: true },
-  });
-  const amount = Number(aggregate._sum.amount ?? 0);
+  const amount = await totalIncomeBySource('simpaskor');
   await prisma.revenueSource.update({
     where: { id: 'simpaskor' },
     data: {
@@ -1330,7 +1335,7 @@ const applyWebhookTransactions = async (sourceId, payload) => {
   }
 
   const aggregate = await prisma.financeTransaction.aggregate({
-    where: { sourceId, direction: 'income', status: 'terverifikasi' },
+    where: { sourceId, direction: 'income' },
     _sum: { amount: true },
   });
 
@@ -1402,8 +1407,8 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
     const syncedAdminFees = id === 'simpaskor'
       ? await applySimpaskorAdminFees(payload, { writeLog: false })
       : null;
-    const amount = syncedAdminFees?.inserted > 0
-      ? syncedAdminFees.currentTotal
+    const amount = id === 'simpaskor'
+      ? syncedAdminFees?.currentTotal ?? await totalIncomeBySource(id)
       : extractBalanceAmount(id, payload);
 
     const result = {
