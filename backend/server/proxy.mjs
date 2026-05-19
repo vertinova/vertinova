@@ -980,6 +980,24 @@ const getCurrentSourceAmount = async (id) => {
   return Number(source?.currentBalance ?? 0);
 };
 
+const formatAmount = (amount) => `Rp ${Number(amount).toLocaleString('id-ID')}`;
+
+const resolveSyncedAmount = async (id, name, nextAmount) => {
+  const currentAmount = await getCurrentSourceAmount(id);
+
+  if (id === 'simpaskor' && currentAmount > 0 && nextAmount < currentAmount) {
+    return {
+      amount: currentAmount,
+      message: `Saldo ${name} dari API (${formatAmount(nextAmount)}) lebih kecil dari saldo tersimpan (${formatAmount(currentAmount)}), saldo lama dipertahankan.`,
+    };
+  }
+
+  return {
+    amount: nextAmount,
+    message: `Saldo ${name} berhasil disinkronkan dari API.`,
+  };
+};
+
 const createSyncTransaction = async (sourceId, sourceName, amount) => {
   if (amount <= 0) return;
   const today = new Date();
@@ -1126,12 +1144,13 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
       return result;
     }
 
+    const synced = await resolveSyncedAmount(id, name, extractBalanceAmount(id, payload));
     const result = {
       id,
-      amount: extractBalanceAmount(id, payload),
+      amount: synced.amount,
       status: 'Sinkron',
       lastSync: new Date().toISOString(),
-      message: `Saldo ${name} berhasil disinkronkan dari API.`,
+      message: synced.message,
     };
     await updateSourceSync({ ...result, payload });
     await createSyncTransaction(id, name, result.amount);
