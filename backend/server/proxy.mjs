@@ -632,6 +632,10 @@ const paymentConfigPayload = ({ id, name, adminFee }) => ({
 });
 
 const normalizeAmount = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return Number.NaN;
+  }
+
   if (typeof value === 'number') {
     return value;
   }
@@ -641,6 +645,9 @@ const normalizeAmount = (value) => {
       .replace(/[^\d,.-]/g, '')
       .replace(/\.(?=\d{3}(\D|$))/g, '')
       .replace(',', '.');
+    if (!normalized || normalized === '-' || normalized === '.' || normalized === ',') {
+      return Number.NaN;
+    }
     return Number(normalized);
   }
 
@@ -655,30 +662,112 @@ const normalizeDate = (value) => {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 };
 
+const firstFiniteAmount = (...values) => {
+  for (const value of values) {
+    const amount = normalizeAmount(value);
+
+    if (Number.isFinite(amount)) {
+      return amount;
+    }
+  }
+
+  return undefined;
+};
+
+const extractAdminFeeAmount = (payload) =>
+  firstFiniteAmount(
+    payload?.totalAdminFee,
+    payload?.total_admin_fee,
+    payload?.adminFeeTotal,
+    payload?.admin_fee_total,
+    payload?.summary?.totalAdminFee,
+    payload?.summary?.total_admin_fee,
+    payload?.summary?.adminFee,
+    payload?.summary?.admin_fee,
+    payload?.data?.totalAdminFee,
+    payload?.data?.total_admin_fee,
+    payload?.data?.adminFeeTotal,
+    payload?.data?.admin_fee_total,
+    payload?.result?.totalAdminFee,
+    payload?.result?.total_admin_fee,
+    payload?.result?.adminFeeTotal,
+    payload?.result?.admin_fee_total,
+    payload?.adminFee,
+    payload?.admin_fee,
+    payload?.fee,
+    payload?.data?.adminFee,
+    payload?.data?.admin_fee,
+    payload?.data?.fee,
+    payload?.data?.payment_config?.admin_fee,
+    payload?.data?.paymentConfig?.adminFee,
+    payload?.result?.adminFee,
+    payload?.result?.admin_fee,
+    payload?.result?.fee,
+  );
+
+const extractDetailRows = (payload) => {
+  const detailGroups = [
+    payload?.details,
+    payload?.data?.details,
+    payload?.result?.details,
+  ].filter(Boolean);
+
+  return detailGroups.flatMap((details) => [
+    ...(Array.isArray(details?.tickets) ? details.tickets : []),
+    ...(Array.isArray(details?.voting) ? details.voting : []),
+    ...(Array.isArray(details?.registrations) ? details.registrations : []),
+    ...(Array.isArray(details?.kta) ? details.kta : []),
+  ]);
+};
+
+const extractDetailsAdminFeeTotal = (payload) => {
+  const rows = extractDetailRows(payload);
+  if (rows.length === 0) return undefined;
+
+  let hasAmount = false;
+  const total = rows.reduce((sum, row) => {
+    const amount = extractAdminFeeAmount(row);
+    if (amount === undefined) return sum;
+    hasAmount = true;
+    return sum + amount;
+  }, 0);
+
+  return hasAmount ? total : undefined;
+};
+
 const extractAmount = (payload) => {
   const candidates = [
     payload?.amount,
     payload?.balance,
     payload?.saldo,
-    payload?.total,
-    payload?.data?.amount,
-    payload?.data?.balance,
-    payload?.data?.saldo,
-    payload?.data?.total,
-    payload?.result?.amount,
-    payload?.result?.balance,
-    payload?.result?.saldo,
-    payload?.result?.total,
+    payload?.totalAdminFee,
+    payload?.total_admin_fee,
+    payload?.adminFeeTotal,
+    payload?.admin_fee_total,
     payload?.admin_fee,
     payload?.adminFee,
     payload?.fee,
     payload?.price,
+    payload?.data?.amount,
+    payload?.data?.balance,
+    payload?.data?.saldo,
+    payload?.data?.totalAdminFee,
+    payload?.data?.total_admin_fee,
+    payload?.data?.adminFeeTotal,
+    payload?.data?.admin_fee_total,
     payload?.data?.admin_fee,
     payload?.data?.adminFee,
     payload?.data?.fee,
     payload?.data?.price,
     payload?.data?.payment_config?.admin_fee,
     payload?.data?.paymentConfig?.adminFee,
+    payload?.result?.amount,
+    payload?.result?.balance,
+    payload?.result?.saldo,
+    payload?.result?.totalAdminFee,
+    payload?.result?.total_admin_fee,
+    payload?.result?.adminFeeTotal,
+    payload?.result?.admin_fee_total,
     payload?.result?.admin_fee,
     payload?.result?.adminFee,
     payload?.result?.fee,
@@ -686,6 +775,10 @@ const extractAmount = (payload) => {
     payload?.summary?.totalAdminFee,
     payload?.summary?.total_admin_fee,
     payload?.summary?.adminFee,
+    payload?.summary?.admin_fee,
+    payload?.total,
+    payload?.data?.total,
+    payload?.result?.total,
     payload?.summary?.total,
   ];
 
@@ -708,6 +801,14 @@ const extractAmount = (payload) => {
   }
 
   return 0;
+};
+
+const extractBalanceAmount = (sourceId, payload) => {
+  if (sourceId === 'simpaskor') {
+    return extractAdminFeeAmount(payload) ?? extractDetailsAdminFeeTotal(payload) ?? extractAmount(payload);
+  }
+
+  return extractAmount(payload);
 };
 
 const extractWebhookRows = (payload) => {
@@ -790,6 +891,14 @@ const resolveApiUrl = (url) => {
   return new URL(url, apiBaseUrl).toString();
 };
 
+const isPaymentConfigUrl = (url) => {
+  try {
+    return /\/payment-config\/?$/.test(new URL(resolveApiUrl(url)).pathname);
+  } catch {
+    return false;
+  }
+};
+
 const buildSimpaskorUrl = (baseUrl) => {
   if (!baseUrl) return '';
   const year = new Date().getFullYear();
@@ -834,13 +943,14 @@ const getTransactionsFromDb = async () => {
 
 const updateSourceSync = async ({ id, amount, status, message, payload }) => {
   const dbStatus = status === 'Sinkron' ? 'sinkron' : status === 'Manual' ? 'manual' : 'api_belum_terhubung';
+  const data = {
+    status: dbStatus,
+    ...(dbStatus === 'sinkron' ? { currentBalance: amount, lastSyncedAt: new Date() } : {}),
+  };
+
   await prisma.revenueSource.update({
     where: { id },
-    data: {
-      currentBalance: amount,
-      status: dbStatus,
-      ...(dbStatus === 'sinkron' ? { lastSyncedAt: new Date() } : {}),
-    },
+    data,
   });
   await prisma.apiSyncLog.create({
     data: { sourceId: id, status: dbStatus === 'sinkron' ? 'success' : 'failed', message, responsePayload: payload ?? {} },
@@ -856,6 +966,15 @@ const fetchWithRetry = async (url, options, retries = 1) => {
       await new Promise((r) => setTimeout(r, 800));
     }
   }
+};
+
+const getCurrentSourceAmount = async (id) => {
+  const source = await prisma.revenueSource.findUnique({
+    where: { id },
+    select: { currentBalance: true },
+  });
+
+  return Number(source?.currentBalance ?? 0);
 };
 
 const createSyncTransaction = async (sourceId, sourceName, amount) => {
@@ -964,9 +1083,20 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
   if (!url) {
     const result = {
       id,
-      amount: 0,
+      amount: await getCurrentSourceAmount(id),
       status: 'API Belum Terhubung',
       message: `URL API ${name} belum diatur di .env.local.`,
+    };
+    await updateSourceSync({ ...result, payload: {} });
+    return result;
+  }
+
+  if (id === 'simpaskor' && isPaymentConfigUrl(url)) {
+    const result = {
+      id,
+      amount: await getCurrentSourceAmount(id),
+      status: 'API Belum Terhubung',
+      message: 'SIMPASKOR_BALANCE_URL masih mengarah ke payment-config. Gunakan endpoint saldo/admin-fees Simpaskor.',
     };
     await updateSourceSync({ ...result, payload: {} });
     return result;
@@ -985,7 +1115,7 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
     if (!response.ok) {
       const result = {
         id,
-        amount: 0,
+        amount: await getCurrentSourceAmount(id),
         status: 'API Belum Terhubung',
         message: `API ${name} mengembalikan status ${response.status}.`,
       };
@@ -995,7 +1125,7 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
 
     const result = {
       id,
-      amount: extractAmount(payload),
+      amount: extractBalanceAmount(id, payload),
       status: 'Sinkron',
       lastSync: new Date().toISOString(),
       message: `Saldo ${name} berhasil disinkronkan dari API.`,
@@ -1006,7 +1136,7 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
   } catch (error) {
     const result = {
       id,
-      amount: 0,
+      amount: await getCurrentSourceAmount(id),
       status: 'API Belum Terhubung',
       message: error instanceof Error ? error.message : `Gagal menghubungi API ${name}.`,
     };
