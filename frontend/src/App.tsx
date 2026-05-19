@@ -25,7 +25,6 @@ import {
   Code2,
   DatabaseZap,
   Download,
-  Eye,
   Landmark,
   Layers3,
   LineChart,
@@ -37,7 +36,6 @@ import {
   RefreshCcw,
   School,
   Search,
-  ServerCog,
   ShieldCheck,
   Sparkles,
   UserRound,
@@ -467,7 +465,6 @@ function App() {
   const [sources, setSources] = useState(baseSources);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [query, setQuery] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('vertinova_token') ?? '');
   const [user, setUser] = useState<AdminUser | null>(null);
@@ -573,35 +570,6 @@ function App() {
       setIsAccessLoading(false);
     }
   }, [authToken, authedFetch]);
-
-  const syncApiSources = useCallback(async () => {
-    setIsSyncing(true);
-    setSyncMessage('Mengambil saldo dari API lalu menyimpan ke database lokal...');
-
-    try {
-      const response = await authedFetch('/api/finance/sync', { method: 'POST' });
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.message ?? 'API finance proxy tidak merespons dengan benar.');
-      }
-
-      const payload = (await response.json()) as {
-        sources: ApiSourcePayload[];
-        transactions: Transaction[];
-      };
-
-      mergeApiSources(payload.sources);
-      setTransactions(payload.transactions);
-      setSyncMessage('Sinkronisasi selesai dan tersimpan ke database lokal.');
-      setNotice('Sinkronisasi API selesai.');
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'Gagal mengambil saldo API.');
-      setNotice('Sinkronisasi gagal. Detail muncul di panel status.');
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [authedFetch, mergeApiSources]);
 
   useEffect(() => {
     const boot = async () => {
@@ -803,10 +771,6 @@ function App() {
             <span>{connectedCount}/2 API sinkron</span>
             <span>{verifiedCount}/{transactions.length} transaksi valid</span>
           </div>
-          <button className="sidebar-sync" disabled={isSyncing} onClick={syncApiSources}>
-            {isSyncing ? <Loader2 size={16} className="spin-icon" /> : <RefreshCcw size={16} />}
-            {isSyncing ? 'Sinkronisasi...' : 'Sinkron sekarang'}
-          </button>
         </div>
       </aside>
 
@@ -838,10 +802,6 @@ function App() {
             <button className="ghost-button user-button" title={user.username}>
               <UserRound size={17} />
               {user.name}
-            </button>
-            <button className="primary-button" disabled={isSyncing} onClick={syncApiSources}>
-              {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
-              {isSyncing ? 'Sinkron...' : 'Sinkron API'}
             </button>
           </div>
         </header>
@@ -1237,64 +1197,6 @@ function SourcesView({
           </tfoot>
         </table>
       </div>
-    </section>
-  );
-}
-
-function IntegrationsView({
-  apiSources,
-  isSyncing,
-  onOpenTransactions,
-  onSync,
-}: {
-  apiSources: RevenueSource[];
-  isSyncing: boolean;
-  onOpenTransactions: () => void;
-  onSync: () => void;
-}) {
-  return (
-    <section className="integration-grid">
-      {apiSources.map((source) => (
-        <article className="panel integration-card" key={source.id}>
-          <div className="source-header">
-            <div className="source-icon" style={{ backgroundColor: `${source.color}1f`, color: source.color }}>
-              <source.icon size={22} />
-            </div>
-            <StatusPill status={source.status} />
-          </div>
-          <h2>{source.name}</h2>
-          <p>{source.message ?? source.description}</p>
-          <dl>
-            <div>
-              <dt>Saldo</dt>
-              <dd>{formatCurrency(source.amount)}</dd>
-            </div>
-            <div>
-              <dt>Terakhir sinkron</dt>
-              <dd>{formatDate(source.lastSync)}</dd>
-            </div>
-          </dl>
-          <div className="integration-actions">
-            <button className="primary-button" disabled={isSyncing} onClick={onSync}>
-              {isSyncing ? <Loader2 size={18} className="spin-icon" /> : <RefreshCcw size={18} />}
-              Sinkron semua API
-            </button>
-            {source.status === 'Sinkron' ? (
-              <button className="ghost-button" onClick={onOpenTransactions}>
-                <Eye size={17} />
-                Lihat Transaksi
-              </button>
-            ) : null}
-          </div>
-        </article>
-      ))}
-
-      <article className="panel endpoint-panel">
-        <PanelTitle eyebrow="Endpoint" title="Konektor server" />
-        <EndpointRow icon={Layers3} title="/api/finance/simpaskor/balance" note="Mengambil saldo Simpaskor dengan header X-API-Key." />
-        <EndpointRow icon={PlugZap} title="/api/finance/forbasi/balance" note="Mengambil saldo Forbasi dengan header X-API-Key." />
-        <EndpointRow icon={ServerCog} title="/api/finance/sync" note="Menarik semua API dan menyimpan transaksi harian." />
-      </article>
     </section>
   );
 }
@@ -2115,18 +2017,6 @@ function TransactionRow({ showSource = true, transaction }: { showSource?: boole
         <span>{new Date(transaction.date).toLocaleString('id-ID')}</span>
       </div>
       <span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span>
-    </div>
-  );
-}
-
-function EndpointRow({ icon: Icon, note, title }: { icon: LucideIcon; note: string; title: string }) {
-  return (
-    <div className="endpoint-row">
-      <Icon size={20} />
-      <div>
-        <strong>{title}</strong>
-        <span>{note}</span>
-      </div>
     </div>
   );
 }

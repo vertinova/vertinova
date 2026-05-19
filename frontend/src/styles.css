@@ -231,10 +231,6 @@
     @apply rounded-lg bg-white/12 px-3 py-2 text-xs font-bold normal-case text-white/78;
   }
 
-  .sidebar-sync {
-    @apply mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border-0 bg-white px-3 text-sm font-black text-[#101a16] transition hover:bg-[#eaf1ed] disabled:opacity-70;
-  }
-
   .content {
     @apply grid content-start gap-4 p-4 pb-28;
   }
@@ -652,28 +648,10 @@
     @apply flex items-center gap-2 font-black;
   }
 
-  .integration-grid,
   .reports-grid {
     @apply grid grid-cols-1 gap-4;
   }
 
-  .integration-card {
-    @apply grid content-start gap-4;
-  }
-
-  .integration-card h2 {
-    @apply text-2xl font-black;
-  }
-
-  .integration-card p {
-    @apply leading-7 text-muted;
-  }
-
-  .integration-card dl {
-    @apply grid gap-2;
-  }
-
-  .integration-card dl div,
   .report-lines div {
     @apply grid gap-1 rounded-lg bg-[#f8faf9] px-3 py-3;
   }
@@ -686,32 +664,6 @@
   dd,
   .report-lines strong {
     @apply m-0 font-black;
-  }
-
-  .endpoint-panel {
-    @apply grid content-start gap-3;
-  }
-
-  .endpoint-row {
-    @apply flex items-start gap-3 rounded-lg border border-line bg-[#fbfcfb] p-3;
-  }
-
-  .endpoint-row svg {
-    @apply mt-1 text-[#2f7d55];
-  }
-
-  .endpoint-row strong,
-  .endpoint-row span {
-    @apply block;
-  }
-
-  .endpoint-row strong {
-    @apply text-sm;
-    overflow-wrap: anywhere;
-  }
-
-  .endpoint-row span {
-    @apply mt-1 text-sm leading-6 text-muted;
   }
 
   .report-main {
@@ -917,10 +869,6 @@
 
   .site-footer a {
     @apply text-white;
-  }
-
-  .integration-actions {
-    @apply grid gap-2;
   }
 
   /* ── Dashboard redesign ── */
@@ -1188,7 +1136,6 @@
   }
 
   .panel-title,
-  .integration-card dl div,
   .report-lines div {
     @apply flex items-center justify-between gap-4;
   }
@@ -1287,7 +1234,6 @@
     @apply justify-end;
   }
 
-  .integration-grid,
   .reports-grid,
   .transaction-detail-grid,
   .management-grid {
