@@ -30,7 +30,8 @@ SUPER_ADMIN_NAME=Super Admin
 SUPER_ADMIN_EMAIL=admin@vertinova.id
 SUPER_ADMIN_PASSWORD=${ADMIN_PASSWORD}
 SESSION_TTL_HOURS=12
-SIMPASKOR_BALANCE_URL=https://simpaskor.id/api/external/admin-fees
+SIMPASKOR_API_BASE_URL=https://simpaskor.id
+SIMPASKOR_BALANCE_URL=/api/external/admin-fees?includeDetails=true
 SIMPASKOR_API_KEY=${SIMPASKOR_KEY}
 SIMPASKOR_API_KEY_HEADER=X-API-Key
 FORBASI_BALANCE_URL=/api/external/kta/payment-config

@@ -891,9 +891,17 @@ const resolveApiUrl = (url) => {
   return new URL(url, apiBaseUrl).toString();
 };
 
+const resolveSimpaskorUrl = (url) => {
+  if (!url) {
+    return '';
+  }
+
+  return new URL(url, process.env.SIMPASKOR_API_BASE_URL ?? 'https://simpaskor.id').toString();
+};
+
 const isPaymentConfigUrl = (url) => {
   try {
-    return /\/payment-config\/?$/.test(new URL(resolveApiUrl(url)).pathname);
+    return /\/payment-config\/?$/.test(new URL(resolveSimpaskorUrl(url)).pathname);
   } catch {
     return false;
   }
@@ -901,7 +909,7 @@ const isPaymentConfigUrl = (url) => {
 
 const buildSimpaskorUrl = (baseUrl) => {
   if (!baseUrl) return '';
-  const url = new URL(resolveApiUrl(baseUrl));
+  const url = new URL(resolveSimpaskorUrl(baseUrl));
   if (process.env.SIMPASKOR_BALANCE_FROM) {
     url.searchParams.set('from', process.env.SIMPASKOR_BALANCE_FROM);
   }
