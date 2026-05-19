@@ -274,13 +274,78 @@ const formatDate = (value?: string | null) => {
 
 const toMillions = (value: number) => Math.round(value / 1_000_000);
 
-const downloadCsv = (filename: string, rows: Array<Record<string, string | number>>) => {
-  if (rows.length === 0) return;
+type ExcelCell = {
+  value: string | number | Date | null;
+  type?: 'String' | 'Number' | 'DateTime';
+  style?: 'title' | 'meta' | 'header' | 'text' | 'currency' | 'date' | 'total' | 'totalCurrency';
+};
 
-  const headers = Object.keys(rows[0]);
-  const escape = (value: string | number) => `"${String(value).replaceAll('"', '""')}"`;
-  const csv = [headers.join(','), ...rows.map((row) => headers.map((header) => escape(row[header])).join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+type ExcelSheet = {
+  name: string;
+  columns: number[];
+  rows: ExcelCell[][];
+};
+
+const excelDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const xmlEscape = (value: string | number) =>
+  String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+
+const excelCell = (cell: ExcelCell) => {
+  const style = cell.style ?? (cell.type === 'Number' ? 'text' : cell.type === 'DateTime' ? 'date' : 'text');
+  const value = cell.value ?? '';
+  const dataType = cell.type ?? (typeof value === 'number' ? 'Number' : value instanceof Date ? 'DateTime' : 'String');
+  const serializedValue = value instanceof Date ? value.toISOString() : xmlEscape(value);
+
+  return `<Cell ss:StyleID="${style}"><Data ss:Type="${dataType}">${serializedValue}</Data></Cell>`;
+};
+
+const excelRow = (cells: ExcelCell[]) => `<Row>${cells.map(excelCell).join('')}</Row>`;
+
+const excelWorksheet = (sheet: ExcelSheet) => `
+  <Worksheet ss:Name="${xmlEscape(sheet.name)}">
+    <Table>
+      ${sheet.columns.map((width) => `<Column ss:Width="${width}" />`).join('')}
+      ${sheet.rows.map(excelRow).join('')}
+    </Table>
+    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+      <FreezePanes />
+      <FrozenNoSplit />
+      <SplitHorizontal>3</SplitHorizontal>
+      <TopRowBottomPane>3</TopRowBottomPane>
+      <ActivePane>2</ActivePane>
+    </WorksheetOptions>
+  </Worksheet>`;
+
+const downloadExcel = (filename: string, sheets: ExcelSheet[]) => {
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook
+  xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="title"><Font ss:Bold="1" ss:Size="16" ss:Color="#10251f" /><Interior ss:Color="#dff3ea" ss:Pattern="Solid" /></Style>
+    <Style ss:ID="meta"><Font ss:Color="#53645f" /></Style>
+    <Style ss:ID="header"><Font ss:Bold="1" ss:Color="#ffffff" /><Interior ss:Color="#12372f" ss:Pattern="Solid" /><Alignment ss:Horizontal="Center" /></Style>
+    <Style ss:ID="text"><Alignment ss:Vertical="Top" /></Style>
+    <Style ss:ID="currency"><NumberFormat ss:Format="&quot;Rp&quot; #,##0" /></Style>
+    <Style ss:ID="date"><NumberFormat ss:Format="dd mmm yyyy hh:mm" /></Style>
+    <Style ss:ID="total"><Font ss:Bold="1" /><Interior ss:Color="#eef7f2" ss:Pattern="Solid" /></Style>
+    <Style ss:ID="totalCurrency"><Font ss:Bold="1" /><Interior ss:Color="#eef7f2" ss:Pattern="Solid" /><NumberFormat ss:Format="&quot;Rp&quot; #,##0" /></Style>
+  </Styles>
+  ${sheets.map(excelWorksheet).join('')}
+</Workbook>`;
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -288,6 +353,113 @@ const downloadCsv = (filename: string, rows: Array<Record<string, string | numbe
   link.click();
   URL.revokeObjectURL(url);
 };
+
+const buildSummarySheet = ({
+  sources,
+  transactions,
+  totalIncome,
+  apiIncome,
+  manualIncome,
+}: {
+  sources: RevenueSource[];
+  transactions: Transaction[];
+  totalIncome: number;
+  apiIncome: number;
+  manualIncome: number;
+}): ExcelSheet => {
+  const connected = sources.filter((source) => source.status === 'Sinkron').length;
+  const verified = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
+
+  return {
+    name: 'Ringkasan',
+    columns: [190, 150, 160, 190],
+    rows: [
+      [{ value: 'Vertinova Finance Export', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }],
+      [{ value: 'Dibuat pada', style: 'meta' }, { value: new Date(), type: 'DateTime', style: 'date' }, { value: 'Format', style: 'meta' }, { value: 'Excel Workbook', style: 'meta' }],
+      [{ value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+      [{ value: 'Metrik', style: 'header' }, { value: 'Nilai', style: 'header' }, { value: 'Catatan', style: 'header' }, { value: 'Status', style: 'header' }],
+      [{ value: 'Total saldo tercatat' }, { value: totalIncome, type: 'Number', style: 'currency' }, { value: 'Semua sumber pendapatan' }, { value: 'Aktif' }],
+      [{ value: 'Saldo API' }, { value: apiIncome, type: 'Number', style: 'currency' }, { value: 'Simpaskor + Forbasi' }, { value: `${connected}/2 sinkron` }],
+      [{ value: 'Saldo manual' }, { value: manualIncome, type: 'Number', style: 'currency' }, { value: 'Desa, Sekolah, Swasta' }, { value: 'Manual' }],
+      [{ value: 'Transaksi terverifikasi' }, { value: verified, type: 'Number' }, { value: `Dari ${transactions.length} transaksi` }, { value: 'Terverifikasi' }],
+    ],
+  };
+};
+
+const buildSourcesSheet = (sources: RevenueSource[], totalIncome: number): ExcelSheet => ({
+  name: 'Sumber Pendapatan',
+  columns: [140, 95, 130, 135, 165, 310],
+  rows: [
+    [{ value: 'Sumber Pendapatan', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }],
+    [{ value: 'Dibuat pada', style: 'meta' }, { value: new Date(), type: 'DateTime', style: 'date' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    [{ value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    ['Sumber', 'Kategori', 'Status', 'Saldo', 'Terakhir Sinkron', 'Catatan'].map((value) => ({ value, style: 'header' })),
+    ...sources.map((source) => [
+      { value: source.name },
+      { value: source.category === 'api' ? 'API' : 'Manual' },
+      { value: source.status },
+      { value: source.amount, type: 'Number' as const, style: 'currency' as const },
+      { value: excelDate(source.lastSync), type: 'DateTime' as const, style: 'date' as const },
+      { value: source.message ?? source.description },
+    ]),
+    [
+      { value: 'Total', style: 'total' },
+      { value: '', style: 'total' },
+      { value: '', style: 'total' },
+      { value: totalIncome, type: 'Number', style: 'totalCurrency' },
+      { value: '', style: 'total' },
+      { value: '', style: 'total' },
+    ],
+  ],
+});
+
+const buildTransactionsSheet = (transactions: Transaction[]): ExcelSheet => ({
+  name: 'Transaksi',
+  columns: [110, 135, 280, 160, 130, 120],
+  rows: [
+    [{ value: 'Transaksi Finance', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }],
+    [{ value: 'Dibuat pada', style: 'meta' }, { value: new Date(), type: 'DateTime', style: 'date' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    [{ value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    ['ID', 'Sumber', 'Deskripsi', 'Tanggal', 'Nominal', 'Status'].map((value) => ({ value, style: 'header' })),
+    ...transactions.map((transaction) => [
+      { value: transaction.id },
+      { value: transaction.source },
+      { value: transaction.description },
+      { value: excelDate(transaction.date), type: 'DateTime' as const, style: 'date' as const },
+      { value: transaction.amount, type: 'Number' as const, style: 'currency' as const },
+      { value: transaction.status },
+    ]),
+    [
+      { value: 'Total', style: 'total' },
+      { value: transactions.length, type: 'Number', style: 'total' },
+      { value: '', style: 'total' },
+      { value: '', style: 'total' },
+      { value: transactions.reduce((sum, transaction) => sum + transaction.amount, 0), type: 'Number', style: 'totalCurrency' },
+      { value: '', style: 'total' },
+    ],
+  ],
+});
+
+const buildSourceRecapSheet = (sources: RevenueSource[], transactions: Transaction[]): ExcelSheet => ({
+  name: 'Rekap Per Sumber',
+  columns: [140, 130, 130, 150, 160],
+  rows: [
+    [{ value: 'Rekap Per Sumber', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }, { value: '', style: 'title' }],
+    [{ value: 'Dibuat pada', style: 'meta' }, { value: new Date(), type: 'DateTime', style: 'date' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    [{ value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }, { value: '', style: 'meta' }],
+    ['Sumber', 'Saldo Sumber', 'Jumlah Transaksi', 'Nominal Transaksi', 'Status'].map((value) => ({ value, style: 'header' })),
+    ...sources.map((source) => {
+      const sourceTransactions = transactions.filter((transaction) => transaction.sourceId === source.id);
+      return [
+        { value: source.name },
+        { value: source.amount, type: 'Number' as const, style: 'currency' as const },
+        { value: sourceTransactions.length, type: 'Number' as const },
+        { value: sourceTransactions.reduce((sum, transaction) => sum + transaction.amount, 0), type: 'Number' as const, style: 'currency' as const },
+        { value: source.status },
+      ];
+    }),
+  ],
+});
 
 function App() {
   const [routePath, setRoutePath] = useState(() => window.location.pathname);
@@ -538,37 +710,26 @@ function App() {
     index === emptyCashflow.length - 1 ? { ...row, income: toMillions(totalIncome) } : row,
   );
   const exportSources = () => {
-    downloadCsv(
-      `vertinova-sumber-pendapatan-${new Date().toISOString().slice(0, 10)}.csv`,
-      sources.map((source) => ({
-        sumber: source.name,
-        kategori: source.category,
-        status: source.status,
-        saldo: source.amount,
-        terakhir_sinkron: formatDate(source.lastSync),
-      })),
-    );
-    setNotice('CSV sumber pendapatan dibuat.');
+    downloadExcel(`vertinova-sumber-pendapatan-${new Date().toISOString().slice(0, 10)}.xls`, [
+      buildSummarySheet({ sources, transactions, totalIncome, apiIncome, manualIncome }),
+      buildSourcesSheet(sources, totalIncome),
+      buildSourceRecapSheet(sources, transactions),
+    ]);
+    setNotice('Excel sumber pendapatan dibuat.');
   };
 
   const exportTransactions = () => {
     if (transactions.length === 0) {
-      setNotice('Belum ada transaksi untuk diexport.');
+      setNotice('Belum ada transaksi untuk diexport ke Excel.');
       return;
     }
 
-    downloadCsv(
-      `vertinova-transaksi-${new Date().toISOString().slice(0, 10)}.csv`,
-      transactions.map((transaction) => ({
-        id: transaction.id,
-        sumber: transaction.source,
-        deskripsi: transaction.description,
-        tanggal: new Date(transaction.date).toLocaleString('id-ID'),
-        nominal: transaction.amount,
-        status: transaction.status,
-      })),
-    );
-    setNotice('CSV transaksi dibuat.');
+    downloadExcel(`vertinova-transaksi-${new Date().toISOString().slice(0, 10)}.xls`, [
+      buildSummarySheet({ sources, transactions, totalIncome, apiIncome, manualIncome }),
+      buildTransactionsSheet(transactions),
+      buildSourceRecapSheet(sources, transactions),
+    ]);
+    setNotice('Excel transaksi dibuat.');
   };
 
   const activeNav = allowedNavItems.find((item) => item.id === activeView) ?? allowedNavItems[0] ?? navItems[0];
@@ -1424,11 +1585,11 @@ function ReportsView({
         <div className="export-actions">
           <button className="primary-button" onClick={onExportSources}>
             <Download size={18} />
-            Sumber pendapatan
+            Excel sumber
           </button>
           <button className="ghost-button" onClick={onExportTransactions}>
             <Download size={18} />
-            Transaksi
+            Excel transaksi
           </button>
         </div>
       </article>
