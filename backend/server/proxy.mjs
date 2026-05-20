@@ -227,16 +227,15 @@ const requirePermission = (user, response, permission) => {
   return false;
 };
 
-const totalVerifiedIncome = async () => {
-  const result = await prisma.financeTransaction.aggregate({
-    where: { direction: 'income', status: 'terverifikasi' },
-    _sum: { amount: true },
-  });
-  return Number(result._sum.amount ?? 0);
-};
-
 const excludeSyncSnapshots = {
   NOT: { externalId: { startsWith: 'sync-' } },
+};
+
+const totalVerifiedIncome = async () => {
+  const result = await prisma.revenueSource.aggregate({
+    _sum: { currentBalance: true },
+  });
+  return Number(result._sum.currentBalance ?? 0);
 };
 
 const totalIncomeBySource = async (sourceId) => {
@@ -1055,27 +1054,6 @@ const getCurrentSourceAmount = async (id) => {
   return Number(source?.currentBalance ?? 0);
 };
 
-const createSyncTransaction = async (sourceId, sourceName, amount) => {
-  if (amount <= 0) return;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const externalId = `sync-${today.toISOString().slice(0, 10)}`;
-  const dateLabel = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-  await prisma.financeTransaction.upsert({
-    where: { unique_source_external_id: { sourceId, externalId } },
-    create: {
-      sourceId,
-      externalId,
-      direction: 'income',
-      amount,
-      description: `Saldo API ${sourceName} per ${dateLabel}`,
-      status: 'terverifikasi',
-      occurredAt: today,
-    },
-    update: { amount },
-  });
-};
-
 const sourceNames = {
   simpaskor: 'Simpaskor',
   forbasi: 'Forbasi',
@@ -1790,7 +1768,7 @@ const applyWebhookTransactions = async (sourceId, payload) => {
   }
 
   const aggregate = await prisma.financeTransaction.aggregate({
-    where: { sourceId, direction: 'income' },
+    where: { sourceId, direction: 'income', ...excludeSyncSnapshots },
     _sum: { amount: true },
   });
 
@@ -1874,9 +1852,6 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
       message: `Saldo ${name} berhasil disinkronkan dari API.`,
     };
     await updateSourceSync({ ...result, payload });
-    if (id !== 'simpaskor') {
-      await createSyncTransaction(id, name, result.amount);
-    }
     return result;
   } catch (error) {
     const result = {
@@ -2086,6 +2061,7 @@ const route = async (request, response) => {
       return;
     }
 
+    await syncSimpaskorAdminFeeBalance();
     json(response, 200, await listManagedUsers());
     return;
   }
@@ -2285,6 +2261,7 @@ await ensureAccessSchema();
 await ensureAdminFeeSchema();
 await ensurePlatformRevenueSchema();
 await ensureRevenueSources();
+await prisma.financeTransaction.deleteMany({ where: { externalId: { startsWith: 'sync-' } } });
 await syncSimpaskorAdminFeeBalance();
 await ensureSuperAdmin();
 await prisma.userSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
