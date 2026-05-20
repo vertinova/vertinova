@@ -235,9 +235,13 @@ const totalVerifiedIncome = async () => {
   return Number(result._sum.amount ?? 0);
 };
 
+const excludeSyncSnapshots = {
+  NOT: { externalId: { startsWith: 'sync-' } },
+};
+
 const totalIncomeBySource = async (sourceId) => {
   const result = await prisma.financeTransaction.aggregate({
-    where: { sourceId, direction: 'income' },
+    where: { sourceId, direction: 'income', ...excludeSyncSnapshots },
     _sum: { amount: true },
   });
   return Number(result._sum.amount ?? 0);
@@ -965,6 +969,7 @@ const getSourcesFromDb = async () => {
 
 const getTransactionsFromDb = async () => {
   const rows = await prisma.financeTransaction.findMany({
+    where: excludeSyncSnapshots,
     orderBy: { occurredAt: 'desc' },
     include: { source: { select: { name: true } } },
   });
@@ -1598,6 +1603,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && request.url === '/api/finance/sources') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    await syncSimpaskorAdminFeeBalance();
     json(response, 200, { sources: await getSourcesFromDb() });
     return;
   }
@@ -1736,6 +1742,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && request.url === '/api/finance/dashboard') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    await syncSimpaskorAdminFeeBalance();
     const [sources, transactions] = await Promise.all([
       getSourcesFromDb(),
       getTransactionsFromDb(),
