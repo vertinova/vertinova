@@ -1241,6 +1241,9 @@ const parseEventInfo = (description: string): ParsedEvent | null => {
   };
 };
 
+const isSyncSnapshot = (transaction: Transaction) =>
+  /^saldo\s+api\b/i.test(transaction.description?.trim() ?? '');
+
 const isoWeekKey = (date: Date) => {
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const dayNr = (target.getDay() + 6) % 7;
@@ -1282,10 +1285,10 @@ function TransactionsView({
     () => (isShareMode ? sources.filter((source) => source.id === 'simpaskor') : sources),
     [sources, isShareMode],
   );
-  const scopedTransactions = useMemo(
-    () => (isShareMode ? transactions.filter((tx) => tx.sourceId === 'simpaskor') : transactions),
-    [transactions, isShareMode],
-  );
+  const scopedTransactions = useMemo(() => {
+    const cleaned = transactions.filter((tx) => !isSyncSnapshot(tx));
+    return isShareMode ? cleaned.filter((tx) => tx.sourceId === 'simpaskor') : cleaned;
+  }, [transactions, isShareMode]);
 
   const [period, setPeriod] = useState<TransactionPeriod>('all');
   const [groupBy, setGroupBy] = useState<TransactionGroupBy>('day');
