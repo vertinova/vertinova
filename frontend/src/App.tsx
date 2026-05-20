@@ -58,6 +58,13 @@ type NavItem = {
   permission: string;
 };
 
+type SimpaskorBreakdown = {
+  adminFee: number;
+  platformShare: number;
+  packagePayments: number;
+  total: number;
+};
+
 type RevenueSource = {
   id: SourceId;
   name: string;
@@ -71,6 +78,7 @@ type RevenueSource = {
   description: string;
   lastSync?: string | null;
   message?: string;
+  breakdown?: SimpaskorBreakdown | null;
 };
 
 type Transaction = {
@@ -89,6 +97,7 @@ type ApiSourcePayload = {
   status: RevenueSource['status'];
   lastSync?: string | null;
   message?: string;
+  breakdown?: SimpaskorBreakdown | null;
 };
 
 type DetailItem = {
@@ -516,6 +525,7 @@ function App() {
           growth: 0,
           lastSync: apiSource.lastSync ?? null,
           message: apiSource.message,
+          breakdown: apiSource.breakdown ?? null,
         };
       }),
     );
@@ -1062,6 +1072,7 @@ function DashboardView({
 function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined; totalIncome: number }) {
   if (!source) return null;
   const pct = totalIncome > 0 ? (source.amount / totalIncome) * 100 : 0;
+  const breakdown = source.breakdown;
 
   return (
     <motion.article className="db-api-panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
@@ -1083,6 +1094,23 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
           <span style={{ width: `${pct}%`, backgroundColor: source.color }} />
         </div>
       </div>
+
+      {breakdown ? (
+        <div className="db-breakdown-grid">
+          <div className="db-breakdown-cell">
+            <span className="db-breakdown-label">Admin Fee</span>
+            <strong>{formatCurrency(breakdown.adminFee)}</strong>
+          </div>
+          <div className="db-breakdown-cell">
+            <span className="db-breakdown-label">Bagi Hasil</span>
+            <strong>{formatCurrency(breakdown.platformShare)}</strong>
+          </div>
+          <div className="db-breakdown-cell">
+            <span className="db-breakdown-label">Paket Event</span>
+            <strong>{formatCurrency(breakdown.packagePayments)}</strong>
+          </div>
+        </div>
+      ) : null}
 
       <dl className="db-panel-dl">
         <div>

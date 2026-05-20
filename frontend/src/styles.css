@@ -1139,6 +1139,22 @@
     @apply block h-full rounded-full transition-all duration-700;
   }
 
+  .db-breakdown-grid {
+    @apply grid grid-cols-3 gap-2;
+  }
+
+  .db-breakdown-cell {
+    @apply grid gap-1 rounded-lg border border-[#e2ebe5] bg-[#f4f9f6] px-2.5 py-2;
+  }
+
+  .db-breakdown-label {
+    @apply text-[10px] font-bold uppercase tracking-wide text-muted;
+  }
+
+  .db-breakdown-cell strong {
+    @apply text-xs font-black text-ink;
+  }
+
   .db-panel-dl {
     @apply grid gap-2;
   }

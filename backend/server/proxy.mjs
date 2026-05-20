@@ -364,6 +364,28 @@ const ensureAdminFeeSchema = async () => {
   `);
 };
 
+const ensurePlatformRevenueSchema = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS platform_revenue (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      external_id VARCHAR(160) NOT NULL UNIQUE,
+      kind VARCHAR(32) NOT NULL,
+      sub_type VARCHAR(40) NULL,
+      event_id VARCHAR(120) NULL,
+      event_title VARCHAR(255) NULL,
+      amount DECIMAL(18, 2) NOT NULL,
+      paid_at DATETIME NOT NULL,
+      description VARCHAR(255) NOT NULL,
+      order_id VARCHAR(120) NULL,
+      raw_payload JSON NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      KEY index_platform_revenue_kind_paid_at (kind, paid_at),
+      KEY index_platform_revenue_paid_at (paid_at)
+    )
+  `);
+};
+
 const ensureSuperAdmin = async () => {
   const username = parseUsername(process.env.SUPER_ADMIN_USERNAME ?? 'serigala');
   const email = String(process.env.SUPER_ADMIN_EMAIL ?? '').trim().toLowerCase() || null;
@@ -952,7 +974,10 @@ const buildSimpaskorUrl = (baseUrl) => {
 };
 
 const getSourcesFromDb = async () => {
-  const rows = await prisma.revenueSource.findMany();
+  const [rows, simpaskorBreakdown] = await Promise.all([
+    prisma.revenueSource.findMany(),
+    getSimpaskorBreakdown(),
+  ]);
   return rows
     .sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id))
     .map((row) => ({
@@ -964,6 +989,7 @@ const getSourcesFromDb = async () => {
       color: row.color,
       description: row.description,
       lastSync: row.lastSyncedAt?.toISOString() ?? null,
+      breakdown: row.id === 'simpaskor' ? simpaskorBreakdown : null,
     }));
 };
 
@@ -1272,6 +1298,7 @@ const listSimpaskorAdminFees = async (searchParams = new URLSearchParams()) => {
 
   const items = rows.map((row) => ({
     id: String(row.id),
+    kind: 'admin_fee',
     type: row.source ?? 'admin_fee',
     title: row.description,
     subtitle: row.source ?? '',
@@ -1286,6 +1313,325 @@ const listSimpaskorAdminFees = async (searchParams = new URLSearchParams()) => {
     items,
     total: Number(aggregate._sum.amount ?? 0),
     count: aggregate._count.id,
+  };
+};
+
+const platformShareTypeLabel = (subType) => {
+  const normalized = String(subType ?? '').toLowerCase();
+  if (normalized === 'ticket' || normalized === 'ticketing' || normalized === 'tiket') return 'Bagi Hasil Tiket';
+  if (normalized === 'voting' || normalized === 'vote') return 'Bagi Hasil Voting';
+  return 'Bagi Hasil';
+};
+
+const packagePaymentTypeLabel = (subType) => {
+  const tier = String(subType ?? '').toUpperCase();
+  return tier ? `Paket ${tier}` : 'Paket Event';
+};
+
+const extractPlatformShareRows = (payload) => {
+  const detailRoots = [payload?.details, payload?.data?.details, payload?.result?.details].filter(Boolean);
+  const shareCandidates = detailRoots.flatMap((details) => [
+    ...(Array.isArray(details?.revenueShares) ? details.revenueShares : []),
+    ...(Array.isArray(details?.shares) ? details.shares : []),
+    ...(Array.isArray(details?.ticketShares) ? details.ticketShares.map((row) => ({ ...row, kindHint: 'ticket' })) : []),
+    ...(Array.isArray(details?.votingShares) ? details.votingShares.map((row) => ({ ...row, kindHint: 'voting' })) : []),
+  ]);
+  return shareCandidates;
+};
+
+const extractPackagePaymentRows = (payload) => {
+  const detailRoots = [payload?.details, payload?.data?.details, payload?.result?.details].filter(Boolean);
+  return detailRoots.flatMap((details) => [
+    ...(Array.isArray(details?.packagePayments) ? details.packagePayments : []),
+    ...(Array.isArray(details?.eventPayments) ? details.eventPayments : []),
+    ...(Array.isArray(details?.packages) ? details.packages : []),
+  ]);
+};
+
+const inferPlatformShareSubType = (row) => {
+  const explicit = firstPresent(row?.kindHint, row?.kind, row?.type, row?.category, row?.share_type, row?.shareType);
+  const normalized = String(explicit ?? '').toLowerCase();
+  if (normalized.includes('vote') || normalized.includes('voting')) return 'voting';
+  if (normalized.includes('ticket') || normalized.includes('tiket')) return 'ticket';
+  const orderId = String(firstPresent(row?.midtransOrderId, row?.orderId, row?.order_id, row?.id) ?? '').toLowerCase();
+  if (orderId.includes('vote') || orderId.includes('voting')) return 'voting';
+  if (orderId.includes('ticket') || orderId.includes('tiket')) return 'ticket';
+  return normalized || null;
+};
+
+const extractPlatformShareAmount = (row) =>
+  firstFiniteAmount(
+    row?.platformAmount,
+    row?.platform_amount,
+    row?.platformShare,
+    row?.platform_share,
+    row?.amount,
+  );
+
+const extractPackagePaymentAmount = (row) =>
+  firstFiniteAmount(
+    row?.amount,
+    row?.price,
+    row?.total,
+    row?.packageAmount,
+    row?.package_amount,
+  );
+
+const extractEventId = (row) => {
+  const value = firstPresent(row?.eventId, row?.event_id, row?.event?.id);
+  return value !== undefined ? String(value) : null;
+};
+
+const extractEventTitle = (row) => {
+  const value = firstPresent(row?.eventTitle, row?.event_title, row?.event?.title, row?.title, row?.name);
+  return value !== undefined ? String(value).slice(0, 255) : null;
+};
+
+const extractOrderId = (row) => {
+  const value = firstPresent(row?.midtransOrderId, row?.midtrans_order_id, row?.orderId, row?.order_id);
+  return value !== undefined ? String(value).slice(0, 120) : null;
+};
+
+const inferPlatformRevenueStatus = (row) => {
+  const value = firstPresent(row?.status, row?.state, row?.disbursementStatus);
+  return value !== undefined ? String(value).toUpperCase() : null;
+};
+
+const buildPlatformRevenueEntry = ({ row, kind, idPrefix, amountFn, subTypeFn, descriptionFallback }) => {
+  const status = inferPlatformRevenueStatus(row);
+  if (status === 'CANCELLED') return null;
+
+  const amount = amountFn(row);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const rawId = firstPresent(row?.id, row?.externalId, row?.external_id, row?.midtransOrderId, row?.orderId);
+  if (rawId === undefined) return null;
+
+  const subType = subTypeFn(row);
+  const eventId = extractEventId(row);
+  const eventTitle = extractEventTitle(row);
+  const orderId = extractOrderId(row);
+
+  return {
+    row,
+    kind,
+    subType,
+    eventId,
+    eventTitle,
+    amount,
+    paidAt: extractOccurredAt(row),
+    description: extractDescription(descriptionFallback, row),
+    orderId,
+    externalId: `${idPrefix}${String(rawId)}`,
+  };
+};
+
+const normalizePlatformRevenueEntries = (payload) => {
+  const shareRows = extractPlatformShareRows(payload);
+  const packageRows = extractPackagePaymentRows(payload);
+
+  const shareEntries = shareRows
+    .map((row) =>
+      buildPlatformRevenueEntry({
+        row,
+        kind: 'platform_share',
+        idPrefix: 'ps-',
+        amountFn: extractPlatformShareAmount,
+        subTypeFn: inferPlatformShareSubType,
+        descriptionFallback: 'Bagi hasil Simpaskor',
+      }),
+    )
+    .filter(Boolean);
+
+  const packageEntries = packageRows
+    .map((row) =>
+      buildPlatformRevenueEntry({
+        row,
+        kind: 'package_payment',
+        idPrefix: 'pp-',
+        amountFn: extractPackagePaymentAmount,
+        subTypeFn: (r) => {
+          const tier = firstPresent(r?.tier, r?.packageTier, r?.package_tier, r?.package, r?.kind, r?.type);
+          return tier !== undefined ? String(tier).toUpperCase() : null;
+        },
+        descriptionFallback: 'Pembayaran paket Simpaskor',
+      }),
+    )
+    .filter(Boolean);
+
+  return [...shareEntries, ...packageEntries];
+};
+
+const applySimpaskorPlatformRevenue = async (payload, { writeLog = true } = {}) => {
+  const entries = normalizePlatformRevenueEntries(payload);
+
+  if (entries.length === 0) {
+    if (writeLog) {
+      await prisma.apiSyncLog.create({
+        data: {
+          sourceId: 'simpaskor',
+          status: 'failed',
+          message: 'Platform revenue Simpaskor diterima tanpa baris valid.',
+          responsePayload: payload,
+        },
+      });
+    }
+    return { inserted: 0, total: 0 };
+  }
+
+  let total = 0;
+  for (const entry of entries) {
+    total += entry.amount;
+
+    await prisma.platformRevenue.upsert({
+      where: { externalId: entry.externalId },
+      create: {
+        externalId: entry.externalId,
+        kind: entry.kind,
+        subType: entry.subType,
+        eventId: entry.eventId,
+        eventTitle: entry.eventTitle,
+        amount: entry.amount,
+        paidAt: entry.paidAt,
+        description: entry.description,
+        orderId: entry.orderId,
+        rawPayload: entry.row,
+      },
+      update: {
+        kind: entry.kind,
+        subType: entry.subType,
+        eventId: entry.eventId,
+        eventTitle: entry.eventTitle,
+        amount: entry.amount,
+        paidAt: entry.paidAt,
+        description: entry.description,
+        orderId: entry.orderId,
+        rawPayload: entry.row,
+      },
+    });
+
+    await prisma.financeTransaction.upsert({
+      where: { unique_source_external_id: { sourceId: 'simpaskor', externalId: entry.externalId } },
+      create: {
+        sourceId: 'simpaskor',
+        externalId: entry.externalId,
+        direction: 'income',
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.paidAt,
+        rawPayload: entry.row,
+      },
+      update: {
+        amount: entry.amount,
+        description: entry.description,
+        status: 'terverifikasi',
+        occurredAt: entry.paidAt,
+        rawPayload: entry.row,
+      },
+    });
+  }
+
+  if (writeLog) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId: 'simpaskor',
+        status: 'success',
+        message: `Platform revenue Simpaskor menyimpan ${entries.length} transaksi.`,
+        responsePayload: payload,
+      },
+    });
+  }
+
+  return { inserted: entries.length, total };
+};
+
+const listSimpaskorPlatformRevenue = async (searchParams = new URLSearchParams()) => {
+  const where = {};
+  const from = searchParams.get('from');
+  const to = searchParams.get('to');
+  const kind = searchParams.get('kind');
+
+  if (kind === 'platform_share' || kind === 'package_payment') {
+    where.kind = kind;
+  }
+
+  if (from || to) {
+    where.paidAt = {};
+    if (from) where.paidAt.gte = normalizeDate(from);
+    if (to) {
+      const toDate = normalizeDate(to);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+        toDate.setHours(23, 59, 59, 999);
+      }
+      where.paidAt.lte = toDate;
+    }
+  }
+
+  const [rows, aggregate, byKind] = await Promise.all([
+    prisma.platformRevenue.findMany({ where, orderBy: { paidAt: 'desc' } }),
+    prisma.platformRevenue.aggregate({ where, _sum: { amount: true }, _count: { id: true } }),
+    prisma.platformRevenue.groupBy({
+      by: ['kind'],
+      where,
+      _sum: { amount: true },
+      _count: { id: true },
+    }),
+  ]);
+
+  const items = rows.map((row) => ({
+    id: row.externalId,
+    kind: row.kind,
+    type: row.kind === 'platform_share'
+      ? platformShareTypeLabel(row.subType)
+      : packagePaymentTypeLabel(row.subType),
+    title: row.eventTitle ?? row.description,
+    subtitle: row.kind === 'platform_share'
+      ? (row.subType ? `Tipe: ${row.subType}` : '')
+      : (row.subType ? `Tier: ${row.subType}` : ''),
+    quantity: 1,
+    adminFee: Number(row.amount),
+    paidAt: row.paidAt,
+    orderId: row.orderId ?? '',
+  }));
+
+  const breakdown = byKind.reduce((acc, row) => {
+    acc[row.kind] = { total: Number(row._sum.amount ?? 0), count: row._count.id };
+    return acc;
+  }, { platform_share: { total: 0, count: 0 }, package_payment: { total: 0, count: 0 } });
+
+  return {
+    sourceId: 'simpaskor',
+    items,
+    total: Number(aggregate._sum.amount ?? 0),
+    count: aggregate._count.id,
+    breakdown,
+  };
+};
+
+const getSimpaskorBreakdown = async () => {
+  const [adminFeeAgg, platformAgg] = await Promise.all([
+    prisma.adminFee.aggregate({ _sum: { amount: true } }),
+    prisma.platformRevenue.groupBy({
+      by: ['kind'],
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const adminFee = Number(adminFeeAgg._sum.amount ?? 0);
+  let platformShare = 0;
+  let packagePayments = 0;
+  for (const row of platformAgg) {
+    const value = Number(row._sum.amount ?? 0);
+    if (row.kind === 'platform_share') platformShare = value;
+    else if (row.kind === 'package_payment') packagePayments = value;
+  }
+
+  return {
+    adminFee,
+    platformShare,
+    packagePayments,
+    total: adminFee + platformShare + packagePayments,
   };
 };
 
@@ -1440,8 +1786,60 @@ const fetchBalance = async ({ id, name, url, apiKey, apiKeyHeader = 'X-API-Key' 
   }
 };
 
-const syncApiSources = async () =>
-  Promise.all([
+const buildSimpaskorPlatformRevenueUrl = () => {
+  const raw = process.env.SIMPASKOR_PLATFORM_REVENUE_URL ?? '/api/external/platform-revenue?includeDetails=true';
+  if (!raw) return '';
+  const url = new URL(resolveSimpaskorUrl(raw));
+  if (process.env.SIMPASKOR_BALANCE_FROM) url.searchParams.set('from', process.env.SIMPASKOR_BALANCE_FROM);
+  if (process.env.SIMPASKOR_BALANCE_TO) url.searchParams.set('to', process.env.SIMPASKOR_BALANCE_TO);
+  url.searchParams.set('includeDetails', 'true');
+  return url.toString();
+};
+
+const syncSimpaskorPlatformRevenue = async () => {
+  const url = buildSimpaskorPlatformRevenueUrl();
+  if (!url) {
+    return { ok: false, inserted: 0, total: 0, message: 'SIMPASKOR_PLATFORM_REVENUE_URL belum diatur.' };
+  }
+
+  const apiKey = process.env.SIMPASKOR_API_KEY ?? '';
+  const headerName = process.env.SIMPASKOR_API_KEY_HEADER ?? 'X-API-Key';
+  const headers = { Accept: 'application/json' };
+  if (apiKey) headers[headerName] = apiKey;
+
+  try {
+    const response = await fetchWithRetry(url, { headers });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      await prisma.apiSyncLog.create({
+        data: {
+          sourceId: 'simpaskor',
+          status: 'failed',
+          message: `Platform revenue Simpaskor mengembalikan status ${response.status}.`,
+          responsePayload: payload,
+        },
+      });
+      return { ok: false, inserted: 0, total: 0, message: `Status ${response.status}.` };
+    }
+
+    const result = await applySimpaskorPlatformRevenue(payload, { writeLog: false });
+    return { ok: true, ...result };
+  } catch (error) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId: 'simpaskor',
+        status: 'failed',
+        message: error instanceof Error ? error.message : 'Gagal mengambil platform revenue Simpaskor.',
+        responsePayload: {},
+      },
+    });
+    return { ok: false, inserted: 0, total: 0, message: error instanceof Error ? error.message : 'Gagal mengambil platform revenue.' };
+  }
+};
+
+const syncApiSources = async () => {
+  const [simpaskor, forbasi] = await Promise.all([
     fetchBalance({
       id: 'simpaskor',
       name: 'Simpaskor',
@@ -1457,6 +1855,12 @@ const syncApiSources = async () =>
       apiKeyHeader: process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key',
     }),
   ]);
+
+  await syncSimpaskorPlatformRevenue();
+  const finalSimpaskorAmount = await syncSimpaskorAdminFeeBalance();
+
+  return [{ ...simpaskor, amount: finalSimpaskorAmount }, forbasi];
+};
 
 const route = async (request, response) => {
   if (request.method === 'OPTIONS') {
@@ -1632,6 +2036,26 @@ const route = async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/platform-revenue') {
+    if (!requirePermission(user, response, 'finance.transactions')) return;
+    json(response, 200, await listSimpaskorPlatformRevenue(currentUrl.searchParams));
+    return;
+  }
+
+  if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/breakdown') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    json(response, 200, { sourceId: 'simpaskor', breakdown: await getSimpaskorBreakdown() });
+    return;
+  }
+
+  if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-platform-revenue') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    const result = await syncSimpaskorPlatformRevenue();
+    await syncSimpaskorAdminFeeBalance();
+    json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/simpaskor/balance') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, {
@@ -1660,38 +2084,40 @@ const route = async (request, response) => {
     return;
   }
 
-  if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)$/.test(request.url)) {
+  if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)(\?|$)/.test(request.url)) {
     if (!requirePermission(user, response, 'finance.transactions')) return;
-    const sourceId = request.url.split('/')[4];
+    const sourceId = currentUrl.pathname.split('/')[4];
 
     if (sourceId === 'simpaskor') {
-      json(response, 200, await listSimpaskorAdminFees());
+      const [adminFees, platformRevenue, breakdown] = await Promise.all([
+        listSimpaskorAdminFees(currentUrl.searchParams),
+        listSimpaskorPlatformRevenue(currentUrl.searchParams),
+        getSimpaskorBreakdown(),
+      ]);
+      const items = [...adminFees.items, ...platformRevenue.items].sort(
+        (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime(),
+      );
+      json(response, 200, {
+        sourceId: 'simpaskor',
+        items,
+        total: adminFees.total + platformRevenue.total,
+        count: items.length,
+        breakdown,
+      });
       return;
     }
 
-    let url = '';
-    let apiKey = '';
-    let apiKeyHeader = 'X-API-Key';
-
-    if (sourceId === 'simpaskor') {
-      const base = buildSimpaskorUrl(process.env.SIMPASKOR_BALANCE_URL);
-      if (!base) { json(response, 503, { message: 'URL Simpaskor belum diatur.' }); return; }
-      url = base;
-      apiKey = process.env.SIMPASKOR_API_KEY ?? '';
-    } else {
-      const base = process.env.FORBASI_BALANCE_URL;
-      if (!base) { json(response, 503, { message: 'URL Forbasi belum diatur.' }); return; }
-      const u = new URL(resolveApiUrl(base));
-      u.searchParams.set('includeDetails', 'true');
-      url = u.toString();
-      apiKey = process.env.FORBASI_API_KEY ?? '';
-      apiKeyHeader = process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key';
-    }
+    const base = process.env.FORBASI_BALANCE_URL;
+    if (!base) { json(response, 503, { message: 'URL Forbasi belum diatur.' }); return; }
+    const forbasiUrl = new URL(resolveApiUrl(base));
+    forbasiUrl.searchParams.set('includeDetails', 'true');
+    const apiKey = process.env.FORBASI_API_KEY ?? '';
+    const apiKeyHeader = process.env.FORBASI_API_KEY_HEADER ?? 'X-API-Key';
 
     try {
       const headers = { Accept: 'application/json' };
       if (apiKey) headers[apiKeyHeader] = apiKey;
-      const apiRes = await fetchWithRetry(url, { headers });
+      const apiRes = await fetchWithRetry(forbasiUrl.toString(), { headers });
       const payload = await apiRes.json().catch(() => ({}));
 
       if (!apiRes.ok) {
@@ -1699,34 +2125,11 @@ const route = async (request, response) => {
         return;
       }
 
-      let items = [];
-      if (sourceId === 'simpaskor') {
-        const d = payload?.details ?? {};
-        const tickets = (d.tickets ?? []).map((r) => ({
-          id: r.id, type: 'Tiket', title: r.eventTitle ?? '-',
-          subtitle: r.eventSlug ?? '', quantity: r.quantity ?? 1,
-          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
-        }));
-        const voting = (d.voting ?? []).map((r) => ({
-          id: r.id, type: 'Voting', title: r.eventTitle ?? '-',
-          subtitle: r.eventSlug ?? '', quantity: r.voteCount ?? 1,
-          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
-        }));
-        const regs = (d.registrations ?? []).map((r) => ({
-          id: r.id, type: 'Pendaftaran', title: r.eventTitle ?? '-',
-          subtitle: r.eventSlug ?? '', quantity: 1,
-          adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
-        }));
-        items = [...tickets, ...voting, ...regs].sort(
-          (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime()
-        );
-      } else {
-        items = (payload?.details?.kta ?? []).map((r) => ({
-          id: String(r.id), type: 'KTA', title: r.clubName ?? '-',
-          subtitle: `${r.province ?? ''} — ${r.regency ?? ''}`.trim().replace(/^—|—$/, '').trim(),
-          quantity: 1, adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
-        }));
-      }
+      const items = (payload?.details?.kta ?? []).map((r) => ({
+        id: String(r.id), type: 'KTA', title: r.clubName ?? '-',
+        subtitle: `${r.province ?? ''} — ${r.regency ?? ''}`.trim().replace(/^—|—$/, '').trim(),
+        quantity: 1, adminFee: r.adminFee ?? 0, paidAt: r.paidAt, orderId: r.midtransOrderId,
+      }));
 
       json(response, 200, {
         sourceId,
@@ -1776,6 +2179,7 @@ process.on('unhandledRejection', (reason) => {
 
 await ensureAccessSchema();
 await ensureAdminFeeSchema();
+await ensurePlatformRevenueSchema();
 await ensureRevenueSources();
 await syncSimpaskorAdminFeeBalance();
 await ensureSuperAdmin();
