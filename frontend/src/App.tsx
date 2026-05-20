@@ -1221,6 +1221,26 @@ const GROUP_BY_OPTIONS: Array<{ id: TransactionGroupBy; label: string }> = [
 
 const STATUS_OPTIONS: TransactionStatus[] = ['Terverifikasi', 'Review', 'Terjadwal'];
 
+type ParsedEvent = {
+  event: string;
+  type: string;
+  quantity: number;
+  unit: string;
+};
+
+const parseEventInfo = (description: string): ParsedEvent | null => {
+  if (!description) return null;
+  const cleaned = description.replace(/\s+/g, ' ').trim();
+  const match = cleaned.match(/^(?:admin\s+fee\s+)?(\S+)\s+(.+?)\s*\((\d+)\s*([^)]+)\)\s*$/i);
+  if (!match) return null;
+  return {
+    type: match[1].toLowerCase(),
+    event: match[2].trim(),
+    quantity: Number(match[3]) || 0,
+    unit: match[4].trim().toLowerCase(),
+  };
+};
+
 const isoWeekKey = (date: Date) => {
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const dayNr = (target.getDay() + 6) % 7;
@@ -1340,6 +1360,49 @@ function TransactionsView({
       })
       .filter((group) => group.transactions.length > 0 || selectedSources.includes(group.source.id));
   }, [availableSources, filtered, selectedSources]);
+
+  const eventBreakdown = useMemo(() => {
+    type TypeStat = { type: string; total: number; count: number; quantity: number; unit: string };
+    type EventStat = {
+      event: string;
+      total: number;
+      count: number;
+      quantity: number;
+      types: Map<string, TypeStat>;
+      transactions: Transaction[];
+    };
+    const map = new Map<string, EventStat>();
+
+    for (const tx of filtered.filter((t) => t.sourceId === 'simpaskor')) {
+      const info = parseEventInfo(tx.description);
+      const key = info?.event ?? (tx.description?.trim() || 'Lainnya');
+      const entry = map.get(key) ?? {
+        event: key,
+        total: 0,
+        count: 0,
+        quantity: 0,
+        types: new Map<string, TypeStat>(),
+        transactions: [],
+      };
+      entry.total += tx.amount;
+      entry.count += 1;
+      entry.transactions.push(tx);
+      if (info) {
+        entry.quantity += info.quantity;
+        const typeEntry = entry.types.get(info.type) ?? { type: info.type, total: 0, count: 0, quantity: 0, unit: info.unit };
+        typeEntry.total += tx.amount;
+        typeEntry.count += 1;
+        typeEntry.quantity += info.quantity;
+        typeEntry.unit = info.unit;
+        entry.types.set(info.type, typeEntry);
+      }
+      map.set(key, entry);
+    }
+
+    return Array.from(map.values())
+      .map((entry) => ({ ...entry, types: Array.from(entry.types.values()).sort((a, b) => b.total - a.total) }))
+      .sort((a, b) => b.total - a.total);
+  }, [filtered]);
 
   const periodGroups = useMemo(() => {
     const map = new Map<string, { key: string; label: string; sortKey: number; total: number; count: number; transactions: Transaction[] }>();
@@ -1599,6 +1662,30 @@ function TransactionsView({
             ))}
           </div>
 
+          {eventBreakdown.length > 0 ? (
+            <article className="panel">
+              <PanelTitle
+                eyebrow={isShareMode ? `Per event (${sharePercent}% Simpaskor)` : 'Per event'}
+                title="Rekap admin fee Simpaskor per event"
+              />
+              <div className="event-breakdown-list">
+                {eventBreakdown.map((entry) => (
+                  <EventBreakdownCard
+                    key={entry.event}
+                    event={entry.event}
+                    total={entry.total}
+                    count={entry.count}
+                    quantity={entry.quantity}
+                    types={entry.types}
+                    transactions={entry.transactions}
+                    shareRatio={shareRatio}
+                    isShareMode={isShareMode}
+                  />
+                ))}
+              </div>
+            </article>
+          ) : null}
+
           <article className="panel">
             <PanelTitle
               eyebrow={isShareMode ? `Per periode (${sharePercent}% Simpaskor)` : 'Per periode'}
@@ -1737,6 +1824,80 @@ function PeriodGroupCard({
       </button>
       {expanded ? (
         <div className="period-group-body">
+          {transactions.map((transaction) => (
+            <TransactionRow
+              key={`${transaction.id}-${transaction.date}`}
+              transaction={transaction}
+              shareRatio={shareRatio}
+              isShareMode={isShareMode}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function EventBreakdownCard({
+  event,
+  total,
+  count,
+  quantity,
+  types,
+  transactions,
+  shareRatio,
+  isShareMode,
+}: {
+  event: string;
+  total: number;
+  count: number;
+  quantity: number;
+  types: Array<{ type: string; total: number; count: number; quantity: number; unit: string }>;
+  transactions: Transaction[];
+  shareRatio: number;
+  isShareMode: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const displayedTotal = isShareMode ? Math.round(total * shareRatio) : total;
+  return (
+    <div className={`event-breakdown-card ${expanded ? 'expanded' : ''}`}>
+      <button
+        className="event-breakdown-header"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+        aria-expanded={expanded}
+      >
+        <div className="event-breakdown-title">
+          <strong>{event}</strong>
+          <span>
+            {count} transaksi
+            {quantity > 0 ? ` - ${quantity} unit` : ''}
+            {isShareMode ? ` - dari ${formatCurrency(total)}` : ''}
+          </span>
+        </div>
+        <div className="event-breakdown-amount">
+          <b>{formatCurrency(displayedTotal)}</b>
+          <span>{expanded ? 'Sembunyikan' : 'Lihat detail'}</span>
+        </div>
+      </button>
+
+      {types.length > 0 ? (
+        <div className="event-type-chips">
+          {types.map((type) => {
+            const displayed = isShareMode ? Math.round(type.total * shareRatio) : type.total;
+            return (
+              <span className="event-type-chip" key={type.type}>
+                <b>{type.type}</b>
+                <span>{type.count} tx - {type.quantity} {type.unit}</span>
+                <strong>{formatCurrency(displayed)}</strong>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {expanded ? (
+        <div className="event-breakdown-body">
           {transactions.map((transaction) => (
             <TransactionRow
               key={`${transaction.id}-${transaction.date}`}

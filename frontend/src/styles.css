@@ -645,6 +645,70 @@
     @apply grid gap-2 border-t border-line bg-[#fbfcfb] p-3;
   }
 
+  .event-breakdown-list {
+    @apply grid gap-3;
+  }
+
+  .event-breakdown-card {
+    @apply overflow-hidden rounded-lg border border-line bg-white transition;
+  }
+
+  .event-breakdown-card.expanded {
+    @apply border-[#a8b5ae] shadow-[0_8px_18px_rgba(22,33,29,.08)];
+  }
+
+  .event-breakdown-header {
+    @apply flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left;
+  }
+
+  .event-breakdown-title {
+    @apply grid min-w-0 gap-0.5;
+  }
+
+  .event-breakdown-title strong {
+    @apply block truncate text-sm font-black text-ink;
+  }
+
+  .event-breakdown-title span {
+    @apply text-xs font-bold text-muted;
+  }
+
+  .event-breakdown-amount {
+    @apply grid gap-0.5 text-right;
+  }
+
+  .event-breakdown-amount b {
+    @apply text-sm font-black text-ink;
+  }
+
+  .event-breakdown-amount span {
+    @apply text-xs font-bold text-muted;
+  }
+
+  .event-type-chips {
+    @apply flex flex-wrap gap-2 border-t border-line bg-[#fbfcfb] px-4 py-3;
+  }
+
+  .event-type-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-xs;
+  }
+
+  .event-type-chip b {
+    @apply font-black uppercase tracking-wide text-ink;
+  }
+
+  .event-type-chip > span {
+    @apply font-bold text-muted;
+  }
+
+  .event-type-chip strong {
+    @apply font-black text-ink;
+  }
+
+  .event-breakdown-body {
+    @apply grid gap-2 border-t border-line bg-[#fbfcfb] p-3;
+  }
+
   .transaction-detail-grid {
     @apply grid grid-cols-1 gap-4;
   }
