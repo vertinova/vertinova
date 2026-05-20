@@ -830,9 +830,9 @@ function App() {
 
         {activeView === 'transactions' ? (
           <TransactionsView
-            query={query}
             sources={sources}
             transactions={filteredTransactions}
+            user={user}
             onExportTransactions={exportTransactions}
             onRefreshTransactions={loadFinanceData}
           />
@@ -1201,53 +1201,223 @@ function SourcesView({
   );
 }
 
+type TransactionPeriod = 'all' | 'today' | 'week' | 'month' | 'custom';
+type TransactionGroupBy = 'day' | 'week' | 'month';
+type TransactionStatus = Transaction['status'];
+
+const PERIOD_OPTIONS: Array<{ id: TransactionPeriod; label: string }> = [
+  { id: 'all', label: 'Semua waktu' },
+  { id: 'today', label: 'Hari ini' },
+  { id: 'week', label: 'Minggu ini' },
+  { id: 'month', label: 'Bulan ini' },
+  { id: 'custom', label: 'Kustom' },
+];
+
+const GROUP_BY_OPTIONS: Array<{ id: TransactionGroupBy; label: string }> = [
+  { id: 'day', label: 'Per hari' },
+  { id: 'week', label: 'Per minggu' },
+  { id: 'month', label: 'Per bulan' },
+];
+
+const STATUS_OPTIONS: TransactionStatus[] = ['Terverifikasi', 'Review', 'Terjadwal'];
+
+const isoWeekKey = (date: Date) => {
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNr = (target.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.getTime();
+  const yearStart = new Date(target.getFullYear(), 0, 1);
+  const yearStartDay = (yearStart.getDay() + 6) % 7;
+  yearStart.setDate(yearStart.getDate() + ((4 - yearStartDay) + 7) % 7);
+  const week = 1 + Math.round((firstThursday - yearStart.getTime()) / 604800000);
+  return { year: target.getFullYear(), week };
+};
+
+const startOfWeek = (date: Date) => {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNr = (result.getDay() + 6) % 7;
+  result.setDate(result.getDate() - dayNr);
+  return result;
+};
+
 function TransactionsView({
-  query,
   sources,
   transactions,
+  user,
   onExportTransactions,
   onRefreshTransactions,
 }: {
-  query: string;
   sources: RevenueSource[];
   transactions: Transaction[];
+  user: AdminUser;
   onExportTransactions: () => void;
   onRefreshTransactions: () => void;
 }) {
-  const keyword = query.trim().toLowerCase();
-  const sourceConfigs: Array<{ color: string; id: ApiSourceId; title: string }> = [
-    { id: 'simpaskor', title: 'Simpaskor', color: '#16a34a' },
-    { id: 'forbasi', title: 'Forbasi', color: '#2563eb' },
-  ];
-  const apiSources = sources.filter((source): source is RevenueSource & { id: ApiSourceId } =>
-    source.id === 'simpaskor' || source.id === 'forbasi',
-  );
-  const apiTransactions = transactions.filter(
-    (transaction) => transaction.sourceId === 'simpaskor' || transaction.sourceId === 'forbasi',
-  );
-  const totalApiAmount = apiTransactions.length > 0
-    ? apiTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)
-    : apiSources.reduce((sum, source) => sum + source.amount, 0);
-  const verifiedTransactions = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
-  const apiSourceFallbackTotals = Object.fromEntries(apiSources.map((source) => [source.id, source.amount])) as Record<ApiSourceId, number>;
-  const sourceTotals = Object.fromEntries(
-    sourceConfigs.map((source) => {
-      const transactionTotal = transactions
-        .filter((transaction) => transaction.sourceId === source.id)
-        .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const sharePercent = user.revenueSharePercent ?? 0;
+  const shareRatio = sharePercent / 100;
+  const isShareMode = sharePercent > 0;
+  const shareAmount = (value: number) => (isShareMode ? Math.round(value * shareRatio) : value);
 
-      return [source.id, transactionTotal || apiSourceFallbackTotals[source.id] || 0];
-    }),
-  ) as Record<ApiSourceId, number>;
+  const availableSources = useMemo(
+    () => (isShareMode ? sources.filter((source) => source.id === 'simpaskor') : sources),
+    [sources, isShareMode],
+  );
+  const scopedTransactions = useMemo(
+    () => (isShareMode ? transactions.filter((tx) => tx.sourceId === 'simpaskor') : transactions),
+    [transactions, isShareMode],
+  );
+
+  const [period, setPeriod] = useState<TransactionPeriod>('all');
+  const [groupBy, setGroupBy] = useState<TransactionGroupBy>('day');
+  const [selectedSources, setSelectedSources] = useState<SourceId[]>(() => (isShareMode ? ['simpaskor'] : []));
+  const [selectedStatuses, setSelectedStatuses] = useState<TransactionStatus[]>([]);
+  const [minAmount, setMinAmount] = useState('');
+  const [maxAmount, setMaxAmount] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  useEffect(() => {
+    if (isShareMode) {
+      setSelectedSources((prev) => (prev.length === 1 && prev[0] === 'simpaskor' ? prev : ['simpaskor']));
+    }
+  }, [isShareMode]);
+
+  const computedRange = useMemo<{ from: Date | null; to: Date | null }>(() => {
+    const now = new Date();
+    if (period === 'today') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const end = new Date(start.getTime() + 86_400_000);
+      return { from: start, to: end };
+    }
+    if (period === 'week') {
+      const start = startOfWeek(now);
+      const end = new Date(start);
+      end.setDate(start.getDate() + 7);
+      return { from: start, to: end };
+    }
+    if (period === 'month') {
+      return {
+        from: new Date(now.getFullYear(), now.getMonth(), 1),
+        to: new Date(now.getFullYear(), now.getMonth() + 1, 1),
+      };
+    }
+    if (period === 'custom') {
+      return {
+        from: dateFrom ? new Date(`${dateFrom}T00:00:00`) : null,
+        to: dateTo ? new Date(`${dateTo}T23:59:59.999`) : null,
+      };
+    }
+    return { from: null, to: null };
+  }, [period, dateFrom, dateTo]);
+
+  const parsedMin = minAmount === '' ? null : Number(minAmount);
+  const parsedMax = maxAmount === '' ? null : Number(maxAmount);
+
+  const filtered = useMemo(() => {
+    return scopedTransactions.filter((tx) => {
+      const date = new Date(tx.date);
+      if (computedRange.from && date < computedRange.from) return false;
+      if (computedRange.to && date > computedRange.to) return false;
+      if (selectedSources.length && !selectedSources.includes(tx.sourceId)) return false;
+      if (selectedStatuses.length && !selectedStatuses.includes(tx.status)) return false;
+      if (parsedMin != null && !Number.isNaN(parsedMin) && tx.amount < parsedMin) return false;
+      if (parsedMax != null && !Number.isNaN(parsedMax) && tx.amount > parsedMax) return false;
+      return true;
+    });
+  }, [scopedTransactions, computedRange, selectedSources, selectedStatuses, parsedMin, parsedMax]);
+
+  const totalAmountRaw = filtered.reduce((sum, tx) => sum + tx.amount, 0);
+  const totalAmount = shareAmount(totalAmountRaw);
+  const verifiedFiltered = filtered.filter((tx) => tx.status === 'Terverifikasi').length;
+  const averageAmount = filtered.length ? Math.round(totalAmount / filtered.length) : 0;
+
+  const perEventGroups = useMemo(() => {
+    return availableSources
+      .map((source) => {
+        const txs = filtered.filter((tx) => tx.sourceId === source.id);
+        const total = txs.reduce((sum, tx) => sum + tx.amount, 0);
+        return { source, transactions: txs, total };
+      })
+      .filter((group) => group.transactions.length > 0 || selectedSources.includes(group.source.id));
+  }, [availableSources, filtered, selectedSources]);
+
+  const periodGroups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; sortKey: number; total: number; count: number; transactions: Transaction[] }>();
+
+    for (const tx of filtered) {
+      const date = new Date(tx.date);
+      if (Number.isNaN(date.getTime())) continue;
+      let key: string;
+      let label: string;
+      let sortKey: number;
+      if (groupBy === 'day') {
+        const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        key = dayStart.toISOString().slice(0, 10);
+        label = dayStart.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' });
+        sortKey = dayStart.getTime();
+      } else if (groupBy === 'week') {
+        const { year, week } = isoWeekKey(date);
+        const weekStart = startOfWeek(date);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        key = `${year}-W${String(week).padStart(2, '0')}`;
+        label = `Minggu ${week} - ${weekStart.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} s/d ${weekEnd.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+        sortKey = weekStart.getTime();
+      } else {
+        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+        key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        label = monthStart.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+        sortKey = monthStart.getTime();
+      }
+
+      const entry = map.get(key) ?? { key, label, sortKey, total: 0, count: 0, transactions: [] };
+      entry.total += tx.amount;
+      entry.count += 1;
+      entry.transactions.push(tx);
+      map.set(key, entry);
+    }
+
+    return Array.from(map.values()).sort((a, b) => b.sortKey - a.sortKey);
+  }, [filtered, groupBy]);
+
+  const toggleSource = (id: SourceId) => {
+    setSelectedSources((prev) => (prev.includes(id) ? prev.filter((value) => value !== id) : [...prev, id]));
+  };
+  const toggleStatus = (status: TransactionStatus) => {
+    setSelectedStatuses((prev) => (prev.includes(status) ? prev.filter((value) => value !== status) : [...prev, status]));
+  };
+
+  const hasActiveFilters =
+    period !== 'all'
+    || (!isShareMode && selectedSources.length > 0)
+    || selectedStatuses.length > 0
+    || minAmount !== ''
+    || maxAmount !== '';
+
+  const resetFilters = () => {
+    setPeriod('all');
+    setSelectedSources(isShareMode ? ['simpaskor'] : []);
+    setSelectedStatuses([]);
+    setMinAmount('');
+    setMaxAmount('');
+    setDateFrom('');
+    setDateTo('');
+  };
 
   return (
     <section className="transactions-page">
-      <article className="panel transaction-overview">
+      <article className="panel transaction-filter-panel">
         <PanelTitle
-          eyebrow="Transaksi"
-          title="Transaksi Simpaskor dan Forbasi"
+          eyebrow="Filter"
+          title="Filter Transaksi"
           action={
             <div className="transaction-actions">
+              {hasActiveFilters ? (
+                <button className="ghost-button" onClick={resetFilters}>
+                  <X size={17} />
+                  Reset filter
+                </button>
+              ) : null}
               <button className="ghost-button" onClick={onRefreshTransactions}>
                 <RefreshCcw size={17} />
                 Muat ulang
@@ -1259,69 +1429,236 @@ function TransactionsView({
             </div>
           }
         />
-        <div className="transaction-overview-grid">
-          <div>
-            <span>Total transaksi API</span>
-            <strong>{formatCurrency(totalApiAmount)}</strong>
+
+        {isShareMode ? (
+          <div className="share-mode-banner">
+            <WalletCards size={18} />
+            <div>
+              <strong>Bagian Anda: {sharePercent}% dari Simpaskor</strong>
+              <span>Tampilan dikunci ke transaksi Simpaskor. Semua nominal sudah dihitung sebagai bagian Anda.</span>
+            </div>
           </div>
-          <div>
-            <span>Terverifikasi</span>
-            <strong>{verifiedTransactions}</strong>
+        ) : null}
+
+        <div className="filter-row">
+          <span className="filter-label">Periode</span>
+          <div className="filter-chips">
+            {PERIOD_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                className={`filter-chip ${period === option.id ? 'active' : ''}`}
+                onClick={() => setPeriod(option.id)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          <div>
-            <span>Transaksi tersimpan</span>
-            <strong>{transactions.length}</strong>
+        </div>
+
+        {period === 'custom' ? (
+          <div className="filter-row filter-row-grid">
+            <label className="filter-field">
+              <span>Dari tanggal</span>
+              <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+            </label>
+            <label className="filter-field">
+              <span>Sampai tanggal</span>
+              <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+            </label>
+          </div>
+        ) : null}
+
+        <div className="filter-row">
+          <span className="filter-label">Event / Sumber{isShareMode ? ' (terkunci)' : ''}</span>
+          <div className="filter-chips">
+            {availableSources.map((source) => {
+              const active = selectedSources.includes(source.id);
+              return (
+                <button
+                  key={source.id}
+                  className={`filter-chip ${active ? 'active' : ''} ${isShareMode ? 'locked' : ''}`}
+                  onClick={() => !isShareMode && toggleSource(source.id)}
+                  style={active ? { borderColor: source.color, color: source.color } : undefined}
+                  type="button"
+                  disabled={isShareMode}
+                  aria-disabled={isShareMode}
+                >
+                  <span className="source-dot" style={{ backgroundColor: source.color }} />
+                  {source.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="filter-row">
+          <span className="filter-label">Status</span>
+          <div className="filter-chips">
+            {STATUS_OPTIONS.map((status) => (
+              <button
+                key={status}
+                className={`filter-chip ${selectedStatuses.includes(status) ? 'active' : ''}`}
+                onClick={() => toggleStatus(status)}
+                type="button"
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="filter-row filter-row-grid">
+          <label className="filter-field">
+            <span>Nominal minimum (Rp)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="0"
+              min={0}
+              value={minAmount}
+              onChange={(event) => setMinAmount(event.target.value)}
+            />
+          </label>
+          <label className="filter-field">
+            <span>Nominal maksimum (Rp)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              placeholder="Tanpa batas"
+              min={0}
+              value={maxAmount}
+              onChange={(event) => setMaxAmount(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="filter-row">
+          <span className="filter-label">Kelompokkan</span>
+          <div className="filter-chips">
+            {GROUP_BY_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                className={`filter-chip ${groupBy === option.id ? 'active' : ''}`}
+                onClick={() => setGroupBy(option.id)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         </div>
       </article>
 
-      <div className="transaction-detail-grid">
-        {sourceConfigs.map((source) => (
-          <TransactionSourcePanel
-            color={source.color}
-            key={source.id}
-            sourceId={source.id}
-            total={sourceTotals[source.id] ?? 0}
-            transactions={transactions.filter((transaction) => transaction.sourceId === source.id)}
-            title={source.title}
-          />
-        ))}
-      </div>
+      <article className="panel transaction-overview">
+        <PanelTitle
+          eyebrow={isShareMode ? `Ringkasan bagian Anda (${sharePercent}%)` : 'Ringkasan'}
+          title={hasActiveFilters ? 'Ringkasan sesuai filter' : 'Ringkasan transaksi'}
+        />
+        <div className="transaction-overview-grid">
+          <div>
+            <span>{isShareMode ? `Bagian Anda (${sharePercent}%)` : 'Total nominal'}</span>
+            <strong>{formatCurrency(totalAmount)}</strong>
+            {isShareMode ? <small className="overview-sub">dari {formatCurrency(totalAmountRaw)}</small> : null}
+          </div>
+          <div>
+            <span>Jumlah transaksi</span>
+            <strong>{filtered.length}</strong>
+          </div>
+          <div>
+            <span>Terverifikasi</span>
+            <strong>{verifiedFiltered}</strong>
+          </div>
+          <div>
+            <span>Rata-rata nominal</span>
+            <strong>{formatCurrency(averageAmount)}</strong>
+          </div>
+        </div>
+      </article>
 
-      <ReconciliationView compact sourceTotals={sourceTotals} transactions={transactions} onExportTransactions={onExportTransactions} />
+      {filtered.length === 0 ? (
+        <article className="panel">
+          <EmptyState
+            icon={BadgeCheck}
+            title="Tidak ada transaksi yang cocok dengan filter."
+            note="Sesuaikan periode, sumber, status, atau rentang nominal untuk melihat data."
+          />
+        </article>
+      ) : (
+        <>
+          <div className="transaction-detail-grid">
+            {perEventGroups.map((group) => (
+              <TransactionEventPanel
+                key={group.source.id}
+                source={group.source}
+                total={group.total}
+                transactions={group.transactions}
+                shareRatio={shareRatio}
+                isShareMode={isShareMode}
+              />
+            ))}
+          </div>
+
+          <article className="panel">
+            <PanelTitle
+              eyebrow={isShareMode ? `Per periode (${sharePercent}% Simpaskor)` : 'Per periode'}
+              title={
+                groupBy === 'day' ? 'Rekap per hari' : groupBy === 'week' ? 'Rekap per minggu' : 'Rekap per bulan'
+              }
+            />
+            <div className="period-group-list">
+              {periodGroups.map((group) => (
+                <PeriodGroupCard
+                  key={group.key}
+                  label={group.label}
+                  total={group.total}
+                  count={group.count}
+                  transactions={group.transactions}
+                  shareRatio={shareRatio}
+                  isShareMode={isShareMode}
+                />
+              ))}
+            </div>
+          </article>
+        </>
+      )}
     </section>
   );
 }
 
-function TransactionSourcePanel({
-  color,
-  sourceId,
+function TransactionEventPanel({
+  source,
   total,
   transactions,
-  title,
+  shareRatio,
+  isShareMode,
 }: {
-  color: string;
-  sourceId: ApiSourceId;
+  source: RevenueSource;
   total: number;
   transactions: Transaction[];
-  title: string;
+  shareRatio: number;
+  isShareMode: boolean;
 }) {
+  const displayedTotal = isShareMode ? Math.round(total * shareRatio) : total;
   return (
     <article className="panel transaction-detail-panel">
       <div className="transaction-detail-head">
         <div>
-          <span className="source-dot" style={{ backgroundColor: color }} />
-          <p className="eyebrow">{sourceId}</p>
-          <h2>{title}</h2>
+          <span className="source-dot" style={{ backgroundColor: source.color }} />
+          <p className="eyebrow">{source.id}</p>
+          <h2>{source.name}</h2>
         </div>
         <div>
-          <strong>{formatCurrency(total)}</strong>
-          <span>{transactions.length} transaksi tersimpan</span>
+          <strong>{formatCurrency(displayedTotal)}</strong>
+          <span>
+            {transactions.length} transaksi
+            {isShareMode ? ` - bagian dari ${formatCurrency(total)}` : ''}
+          </span>
         </div>
       </div>
 
       {transactions.length === 0 ? (
-        <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Data akan muncul setelah webhook pembayaran berhasil diterima." />
+        <EmptyState icon={BadgeCheck} title="Belum ada transaksi untuk sumber ini." note="Data akan muncul setelah transaksi cocok dengan filter." />
       ) : (
         <div className="table-wrap detail-table-wrap">
           <table>
@@ -1329,29 +1666,88 @@ function TransactionSourcePanel({
               <tr>
                 <th>ID</th>
                 <th>Keterangan</th>
-                <th>Nominal</th>
+                <th>{isShareMode ? 'Bagian Anda' : 'Nominal'}</th>
                 <th>Tanggal</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {transactions.map((transaction) => (
-                <tr key={`${sourceId}-${transaction.id}`}>
-                  <td className="detail-order-id">{transaction.id}</td>
-                  <td>
-                    <div className="detail-cell-title">{transaction.description}</div>
-                    <div className="detail-cell-sub">{transaction.source}</div>
-                  </td>
-                  <td>{formatCurrency(transaction.amount)}</td>
-                  <td>{formatDate(transaction.date)}</td>
-                  <td><span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span></td>
-                </tr>
-              ))}
+              {transactions.map((transaction) => {
+                const shareValue = isShareMode ? Math.round(transaction.amount * shareRatio) : transaction.amount;
+                return (
+                  <tr key={`${source.id}-${transaction.id}`}>
+                    <td className="detail-order-id">{transaction.id}</td>
+                    <td>
+                      <div className="detail-cell-title">{transaction.description}</div>
+                      <div className="detail-cell-sub">{transaction.source}</div>
+                    </td>
+                    <td>
+                      <div>{formatCurrency(shareValue)}</div>
+                      {isShareMode ? <small className="detail-cell-sub">dari {formatCurrency(transaction.amount)}</small> : null}
+                    </td>
+                    <td>{formatDate(transaction.date)}</td>
+                    <td><span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
     </article>
+  );
+}
+
+function PeriodGroupCard({
+  label,
+  total,
+  count,
+  transactions,
+  shareRatio,
+  isShareMode,
+}: {
+  label: string;
+  total: number;
+  count: number;
+  transactions: Transaction[];
+  shareRatio: number;
+  isShareMode: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const displayedTotal = isShareMode ? Math.round(total * shareRatio) : total;
+  return (
+    <div className={`period-group-card ${expanded ? 'expanded' : ''}`}>
+      <button
+        className="period-group-header"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+        aria-expanded={expanded}
+      >
+        <div>
+          <strong>{label}</strong>
+          <span>
+            {count} transaksi
+            {isShareMode ? ` - dari ${formatCurrency(total)}` : ''}
+          </span>
+        </div>
+        <div>
+          <b>{formatCurrency(displayedTotal)}</b>
+          <span>{expanded ? 'Sembunyikan' : 'Lihat detail'}</span>
+        </div>
+      </button>
+      {expanded ? (
+        <div className="period-group-body">
+          {transactions.map((transaction) => (
+            <TransactionRow
+              key={`${transaction.id}-${transaction.date}`}
+              transaction={transaction}
+              shareRatio={shareRatio}
+              isShareMode={isShareMode}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -2019,7 +2415,18 @@ function LegendList({ items }: { items: Array<{ name: string; color: string }> }
   );
 }
 
-function TransactionRow({ showSource = true, transaction }: { showSource?: boolean; transaction: Transaction }) {
+function TransactionRow({
+  showSource = true,
+  transaction,
+  shareRatio = 0,
+  isShareMode = false,
+}: {
+  showSource?: boolean;
+  transaction: Transaction;
+  shareRatio?: number;
+  isShareMode?: boolean;
+}) {
+  const shareValue = isShareMode ? Math.round(transaction.amount * shareRatio) : transaction.amount;
   return (
     <div className="transaction-row">
       <div>
@@ -2027,7 +2434,8 @@ function TransactionRow({ showSource = true, transaction }: { showSource?: boole
         <span>{transaction.id} - {transaction.description}</span>
       </div>
       <div>
-        <b>{formatCurrency(transaction.amount)}</b>
+        <b>{formatCurrency(shareValue)}</b>
+        {isShareMode ? <span>dari {formatCurrency(transaction.amount)}</span> : null}
         <span>{new Date(transaction.date).toLocaleString('id-ID')}</span>
       </div>
       <span className={`transaction-status ${transaction.status.toLowerCase()}`}>{transaction.status}</span>

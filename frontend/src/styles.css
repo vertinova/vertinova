@@ -540,6 +540,111 @@
     @apply mt-2 block text-[clamp(1.25rem,3vw,2rem)] font-black leading-tight;
   }
 
+  .transaction-filter-panel {
+    @apply grid gap-4;
+  }
+
+  .share-mode-banner {
+    @apply flex items-start gap-3 rounded-lg border border-[#cae7d4] bg-[#eefaf2] p-3 text-[#166534];
+  }
+
+  .share-mode-banner > div {
+    @apply grid gap-0.5;
+  }
+
+  .share-mode-banner strong {
+    @apply text-sm font-black;
+  }
+
+  .share-mode-banner span {
+    @apply text-xs font-bold text-[#15803d];
+  }
+
+  .overview-sub {
+    @apply mt-1 block text-xs font-bold text-muted;
+  }
+
+  .filter-chip.locked {
+    @apply cursor-not-allowed opacity-90;
+  }
+
+  .filter-row {
+    @apply grid gap-2;
+  }
+
+  .filter-row-grid {
+    @apply grid grid-cols-1 gap-3;
+  }
+
+  .filter-label {
+    @apply text-xs font-black uppercase tracking-wide text-muted;
+  }
+
+  .filter-chips {
+    @apply flex flex-wrap gap-2;
+  }
+
+  .filter-chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-xs font-bold text-ink transition hover:border-[#a8b5ae];
+  }
+
+  .filter-chip.active {
+    @apply border-ink bg-[#16211d] text-white shadow-[0_8px_18px_rgba(22,33,29,.18)];
+  }
+
+  .filter-chip .source-dot {
+    @apply h-2 w-2 rounded-full;
+  }
+
+  .filter-field {
+    @apply grid gap-1;
+  }
+
+  .filter-field span {
+    @apply text-xs font-bold text-muted;
+  }
+
+  .filter-field input {
+    @apply h-11 rounded-lg border border-line bg-white px-3 text-sm font-bold text-ink outline-0 focus:border-ink;
+  }
+
+  .period-group-list {
+    @apply grid gap-3;
+  }
+
+  .period-group-card {
+    @apply overflow-hidden rounded-lg border border-line bg-white transition;
+  }
+
+  .period-group-card.expanded {
+    @apply border-[#a8b5ae] shadow-[0_8px_18px_rgba(22,33,29,.08)];
+  }
+
+  .period-group-header {
+    @apply flex w-full items-center justify-between gap-3 bg-white px-4 py-3 text-left;
+  }
+
+  .period-group-header > div {
+    @apply grid gap-0.5;
+  }
+
+  .period-group-header > div:last-child {
+    @apply text-right;
+  }
+
+  .period-group-header strong,
+  .period-group-header b {
+    @apply text-sm font-black text-ink;
+  }
+
+  .period-group-header span {
+    @apply text-xs font-bold text-muted;
+  }
+
+  .period-group-body {
+    @apply grid gap-2 border-t border-line bg-[#fbfcfb] p-3;
+  }
+
   .transaction-detail-grid {
     @apply grid grid-cols-1 gap-4;
   }
@@ -1131,6 +1236,7 @@
 
   .summary-grid,
   .transaction-overview-grid,
+  .filter-row-grid,
   .form-grid {
     @apply grid-cols-2;
   }
@@ -1285,7 +1391,7 @@
   }
 
   .transaction-overview-grid {
-    @apply grid-cols-3;
+    @apply grid-cols-4;
   }
 }
 
