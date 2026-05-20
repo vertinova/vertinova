@@ -374,6 +374,8 @@ const ensurePlatformRevenueSchema = async () => {
       event_id VARCHAR(120) NULL,
       event_title VARCHAR(255) NULL,
       amount DECIMAL(18, 2) NOT NULL,
+      gross_amount DECIMAL(18, 2) NULL,
+      share_percent DECIMAL(5, 2) NULL,
       paid_at DATETIME NOT NULL,
       description VARCHAR(255) NOT NULL,
       order_id VARCHAR(120) NULL,
@@ -384,6 +386,13 @@ const ensurePlatformRevenueSchema = async () => {
       KEY index_platform_revenue_paid_at (paid_at)
     )
   `);
+
+  if (!(await columnExists('platform_revenue', 'gross_amount'))) {
+    await prisma.$executeRawUnsafe('ALTER TABLE platform_revenue ADD COLUMN gross_amount DECIMAL(18, 2) NULL AFTER amount');
+  }
+  if (!(await columnExists('platform_revenue', 'share_percent'))) {
+    await prisma.$executeRawUnsafe('ALTER TABLE platform_revenue ADD COLUMN share_percent DECIMAL(5, 2) NULL AFTER gross_amount');
+  }
 };
 
 const ensureSuperAdmin = async () => {
@@ -1368,6 +1377,30 @@ const extractPlatformShareAmount = (row) =>
     row?.amount,
   );
 
+const extractGrossAmount = (row) =>
+  firstFiniteAmount(
+    row?.grossAmount,
+    row?.gross_amount,
+    row?.totalAmount,
+    row?.total_amount,
+    row?.grossRevenue,
+    row?.gross_revenue,
+  );
+
+const extractSharePercent = (row) => {
+  const value = firstFiniteAmount(
+    row?.platformSharePercent,
+    row?.platform_share_percent,
+    row?.sharePercent,
+    row?.share_percent,
+    row?.platformPercentage,
+    row?.platform_percentage,
+  );
+  if (!Number.isFinite(value)) return null;
+  const clamped = Math.max(0, Math.min(100, value));
+  return Math.round(clamped * 100) / 100;
+};
+
 const extractPackagePaymentAmount = (row) =>
   firstFiniteAmount(
     row?.amount,
@@ -1412,6 +1445,17 @@ const buildPlatformRevenueEntry = ({ row, kind, idPrefix, amountFn, subTypeFn, d
   const eventTitle = extractEventTitle(row);
   const orderId = extractOrderId(row);
 
+  let grossAmount = null;
+  let sharePercent = null;
+  if (kind === 'platform_share') {
+    const gross = extractGrossAmount(row);
+    grossAmount = Number.isFinite(gross) ? gross : null;
+    sharePercent = extractSharePercent(row);
+    if (sharePercent == null && grossAmount && grossAmount > 0) {
+      sharePercent = Math.round((amount / grossAmount) * 10000) / 100;
+    }
+  }
+
   return {
     row,
     kind,
@@ -1419,6 +1463,8 @@ const buildPlatformRevenueEntry = ({ row, kind, idPrefix, amountFn, subTypeFn, d
     eventId,
     eventTitle,
     amount,
+    grossAmount,
+    sharePercent,
     paidAt: extractOccurredAt(row),
     description: extractDescription(descriptionFallback, row),
     orderId,
@@ -1492,6 +1538,8 @@ const applySimpaskorPlatformRevenue = async (payload, { writeLog = true } = {}) 
         eventId: entry.eventId,
         eventTitle: entry.eventTitle,
         amount: entry.amount,
+        grossAmount: entry.grossAmount,
+        sharePercent: entry.sharePercent,
         paidAt: entry.paidAt,
         description: entry.description,
         orderId: entry.orderId,
@@ -1503,6 +1551,8 @@ const applySimpaskorPlatformRevenue = async (payload, { writeLog = true } = {}) 
         eventId: entry.eventId,
         eventTitle: entry.eventTitle,
         amount: entry.amount,
+        grossAmount: entry.grossAmount,
+        sharePercent: entry.sharePercent,
         paidAt: entry.paidAt,
         description: entry.description,
         orderId: entry.orderId,
@@ -1579,21 +1629,36 @@ const listSimpaskorPlatformRevenue = async (searchParams = new URLSearchParams()
     }),
   ]);
 
-  const items = rows.map((row) => ({
-    id: row.externalId,
-    kind: row.kind,
-    type: row.kind === 'platform_share'
-      ? platformShareTypeLabel(row.subType)
-      : packagePaymentTypeLabel(row.subType),
-    title: row.eventTitle ?? row.description,
-    subtitle: row.kind === 'platform_share'
-      ? (row.subType ? `Tipe: ${row.subType}` : '')
-      : (row.subType ? `Tier: ${row.subType}` : ''),
-    quantity: 1,
-    adminFee: Number(row.amount),
-    paidAt: row.paidAt,
-    orderId: row.orderId ?? '',
-  }));
+  const items = rows.map((row) => {
+    const sharePercent = row.sharePercent !== null && row.sharePercent !== undefined
+      ? Number(row.sharePercent)
+      : null;
+    const grossAmount = row.grossAmount !== null && row.grossAmount !== undefined
+      ? Number(row.grossAmount)
+      : null;
+    const subtitle = row.kind === 'platform_share'
+      ? [
+          row.subType ? `Tipe: ${row.subType}` : null,
+          sharePercent !== null ? `${sharePercent.toFixed(2)}% dari bruto` : null,
+        ].filter(Boolean).join(' • ')
+      : (row.subType ? `Tier: ${row.subType}` : '');
+
+    return {
+      id: row.externalId,
+      kind: row.kind,
+      type: row.kind === 'platform_share'
+        ? platformShareTypeLabel(row.subType)
+        : packagePaymentTypeLabel(row.subType),
+      title: row.eventTitle ?? row.description,
+      subtitle,
+      quantity: 1,
+      adminFee: Number(row.amount),
+      grossAmount,
+      sharePercent,
+      paidAt: row.paidAt,
+      orderId: row.orderId ?? '',
+    };
+  });
 
   const breakdown = byKind.reduce((acc, row) => {
     acc[row.kind] = { total: Number(row._sum.amount ?? 0), count: row._count.id };
@@ -1610,28 +1675,67 @@ const listSimpaskorPlatformRevenue = async (searchParams = new URLSearchParams()
 };
 
 const getSimpaskorBreakdown = async () => {
-  const [adminFeeAgg, platformAgg] = await Promise.all([
+  const [adminFeeAgg, platformAgg, shareAgg] = await Promise.all([
     prisma.adminFee.aggregate({ _sum: { amount: true } }),
     prisma.platformRevenue.groupBy({
       by: ['kind'],
-      _sum: { amount: true },
+      _sum: { amount: true, grossAmount: true },
+      _count: { id: true },
+    }),
+    prisma.platformRevenue.aggregate({
+      where: { kind: 'platform_share', sharePercent: { not: null } },
+      _avg: { sharePercent: true },
+      _min: { sharePercent: true },
+      _max: { sharePercent: true },
     }),
   ]);
 
   const adminFee = Number(adminFeeAgg._sum.amount ?? 0);
   let platformShare = 0;
   let packagePayments = 0;
+  let platformGross = 0;
+  let platformShareCount = 0;
+  let packageCount = 0;
   for (const row of platformAgg) {
     const value = Number(row._sum.amount ?? 0);
-    if (row.kind === 'platform_share') platformShare = value;
-    else if (row.kind === 'package_payment') packagePayments = value;
+    if (row.kind === 'platform_share') {
+      platformShare = value;
+      platformGross = Number(row._sum.grossAmount ?? 0);
+      platformShareCount = row._count.id;
+    } else if (row.kind === 'package_payment') {
+      packagePayments = value;
+      packageCount = row._count.id;
+    }
   }
+
+  const effectiveSharePercent = platformGross > 0
+    ? Math.round((platformShare / platformGross) * 10000) / 100
+    : null;
+  const avgSharePercent = shareAgg._avg.sharePercent !== null && shareAgg._avg.sharePercent !== undefined
+    ? Math.round(Number(shareAgg._avg.sharePercent) * 100) / 100
+    : null;
+
+  const bagiHasil = platformShare + packagePayments;
 
   return {
     adminFee,
     platformShare,
     packagePayments,
-    total: adminFee + platformShare + packagePayments,
+    bagiHasil,
+    total: adminFee + bagiHasil,
+    platformGross,
+    sharePercent: {
+      effective: effectiveSharePercent,
+      average: avgSharePercent,
+      min: shareAgg._min.sharePercent !== null && shareAgg._min.sharePercent !== undefined
+        ? Number(shareAgg._min.sharePercent) : null,
+      max: shareAgg._max.sharePercent !== null && shareAgg._max.sharePercent !== undefined
+        ? Number(shareAgg._max.sharePercent) : null,
+    },
+    counts: {
+      platformShare: platformShareCount,
+      packagePayments: packageCount,
+    },
   };
 };
 

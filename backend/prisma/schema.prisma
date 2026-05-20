@@ -76,19 +76,21 @@ model AdminFee {
 }
 
 model PlatformRevenue {
-  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  externalId  String   @unique @map("external_id") @db.VarChar(160)
-  kind        String   @db.VarChar(32)
-  subType     String?  @map("sub_type") @db.VarChar(40)
-  eventId     String?  @map("event_id") @db.VarChar(120)
-  eventTitle  String?  @map("event_title") @db.VarChar(255)
-  amount      Decimal  @db.Decimal(18, 2)
-  paidAt      DateTime @map("paid_at")
-  description String   @db.VarChar(255)
-  orderId     String?  @map("order_id") @db.VarChar(120)
-  rawPayload  Json?    @map("raw_payload")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  externalId    String   @unique @map("external_id") @db.VarChar(160)
+  kind          String   @db.VarChar(32)
+  subType       String?  @map("sub_type") @db.VarChar(40)
+  eventId       String?  @map("event_id") @db.VarChar(120)
+  eventTitle    String?  @map("event_title") @db.VarChar(255)
+  amount        Decimal  @db.Decimal(18, 2)
+  grossAmount   Decimal? @map("gross_amount") @db.Decimal(18, 2)
+  sharePercent  Decimal? @map("share_percent") @db.Decimal(5, 2)
+  paidAt        DateTime @map("paid_at")
+  description   String   @db.VarChar(255)
+  orderId       String?  @map("order_id") @db.VarChar(120)
+  rawPayload    Json?    @map("raw_payload")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@index([kind, paidAt], name: "index_platform_revenue_kind_paid_at")
   @@index([paidAt], name: "index_platform_revenue_paid_at")

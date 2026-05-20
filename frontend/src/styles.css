@@ -1155,6 +1155,10 @@
     @apply text-xs font-black text-ink;
   }
 
+  .db-breakdown-formula {
+    @apply m-0 text-[11px] leading-snug text-muted;
+  }
+
   .db-panel-dl {
     @apply grid gap-2;
   }

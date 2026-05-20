@@ -62,7 +62,19 @@ type SimpaskorBreakdown = {
   adminFee: number;
   platformShare: number;
   packagePayments: number;
+  bagiHasil: number;
   total: number;
+  platformGross?: number;
+  sharePercent?: {
+    effective: number | null;
+    average: number | null;
+    min: number | null;
+    max: number | null;
+  };
+  counts?: {
+    platformShare: number;
+    packagePayments: number;
+  };
 };
 
 type RevenueSource = {
@@ -972,7 +984,7 @@ function DashboardView({
       {/* ── Hero ── */}
       <motion.section className="db-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="db-hero-left">
-          <p className="db-hero-eyebrow">Total admin fee masuk</p>
+          <p className="db-hero-eyebrow">Total saldo masuk</p>
           <strong className="db-hero-total">{formatCurrency(totalIncome)}</strong>
           <div className="db-breakdown-bar">
             <span style={{ width: `${simpaskorPct}%`, backgroundColor: '#16a34a' }} title={`Simpaskor ${simpaskorPct.toFixed(1)}%`} />
@@ -1096,20 +1108,36 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
       </div>
 
       {breakdown ? (
-        <div className="db-breakdown-grid">
-          <div className="db-breakdown-cell">
-            <span className="db-breakdown-label">Admin Fee</span>
-            <strong>{formatCurrency(breakdown.adminFee)}</strong>
+        <>
+          <div className="db-breakdown-grid">
+            <div className="db-breakdown-cell">
+              <span className="db-breakdown-label">Admin Fee</span>
+              <strong>{formatCurrency(breakdown.adminFee)}</strong>
+            </div>
+            <div className="db-breakdown-cell">
+              <span className="db-breakdown-label">
+                Bagi Hasil
+                {breakdown.sharePercent?.effective != null
+                  ? ` ${breakdown.sharePercent.effective.toFixed(1)}%`
+                  : breakdown.sharePercent?.average != null
+                    ? ` ~${breakdown.sharePercent.average.toFixed(1)}%`
+                    : ''}
+              </span>
+              <strong>{formatCurrency(breakdown.platformShare)}</strong>
+            </div>
+            <div className="db-breakdown-cell">
+              <span className="db-breakdown-label">Paket Event</span>
+              <strong>{formatCurrency(breakdown.packagePayments)}</strong>
+            </div>
           </div>
-          <div className="db-breakdown-cell">
-            <span className="db-breakdown-label">Bagi Hasil</span>
-            <strong>{formatCurrency(breakdown.platformShare)}</strong>
-          </div>
-          <div className="db-breakdown-cell">
-            <span className="db-breakdown-label">Paket Event</span>
-            <strong>{formatCurrency(breakdown.packagePayments)}</strong>
-          </div>
-        </div>
+          <p className="db-breakdown-formula">
+            Saldo = Admin Fee + Bagi Hasil + Paket Event
+            {breakdown.sharePercent?.min != null && breakdown.sharePercent.max != null
+              && breakdown.sharePercent.min !== breakdown.sharePercent.max
+              ? ` · % bagi hasil ${breakdown.sharePercent.min.toFixed(1)}–${breakdown.sharePercent.max.toFixed(1)}%`
+              : ''}
+          </p>
+        </>
       ) : null}
 
       <dl className="db-panel-dl">
