@@ -1168,7 +1168,9 @@ const normalizeAdminFeeEntries = (payload) =>
     .filter((entry) => entry.orderId && Number.isFinite(entry.amount) && entry.amount > 0);
 
 const syncSimpaskorAdminFeeBalance = async () => {
-  const amount = await totalIncomeBySource('simpaskor');
+  const summaryMetric = await readSimpaskorMetric('summary');
+  const summaryTotal = Number(summaryMetric?.jsonValue?.totalSimpaskorBalance ?? summaryMetric?.numericValue ?? 0);
+  const amount = summaryTotal > 0 ? summaryTotal : await totalIncomeBySource('simpaskor');
   await prisma.revenueSource.update({
     where: { id: 'simpaskor' },
     data: {
@@ -1716,36 +1718,46 @@ const upsertSimpaskorMetric = async (metricKey, numericValue, jsonValue) =>
   });
 
 const extractSummaryFromPayload = (payload) => {
-  const summary = payload?.summary ?? payload ?? {};
-  const adminFee = summary?.adminFee ?? {};
-  const platformShare = summary?.platformShare ?? {};
-  const packagePayments = summary?.packagePayments ?? {};
+  const summary = payload?.summary ?? payload?.data?.summary ?? payload?.result?.summary ?? payload?.data ?? payload?.result ?? payload ?? {};
+  const adminFee = summary?.adminFee ?? summary?.admin_fee ?? {};
+  const platformShare = summary?.platformShare ?? summary?.platform_share ?? {};
+  const packagePayments = summary?.packagePayments ?? summary?.package_payments ?? {};
   const numeric = (value) => {
     const amount = normalizeAmount(value);
     return Number.isFinite(amount) ? amount : 0;
   };
+  const totalAdminFee = typeof adminFee === 'object'
+    ? firstPresent(adminFee.total, adminFee.totalAdminFee, adminFee.total_admin_fee)
+    : adminFee;
+  const tierBreakdown = packagePayments?.byTier ?? packagePayments?.by_tier;
   return {
     currency: payload?.currency ?? 'IDR',
-    totalSimpaskorBalance: numeric(summary?.totalSimpaskorBalance),
+    totalSimpaskorBalance: numeric(firstPresent(
+      summary?.totalSimpaskorBalance,
+      summary?.total_simpaskor_balance,
+      summary?.balance,
+      summary?.saldo,
+      summary?.total,
+    )),
     adminFee: {
-      total: numeric(adminFee.total),
-      ticket: numeric(adminFee.ticket),
-      voting: numeric(adminFee.voting),
-      registration: numeric(adminFee.registration),
-      qrisFee: numeric(adminFee.qrisFee ?? summary?.qrisFee ?? adminFee?.qris_fee),
+      total: numeric(totalAdminFee),
+      ticket: numeric(adminFee.ticket ?? adminFee.tickets),
+      voting: numeric(adminFee.voting ?? adminFee.vote),
+      registration: numeric(adminFee.registration ?? adminFee.registrations),
+      qrisFee: numeric(adminFee.qrisFee ?? adminFee.qris_fee ?? summary?.qrisFee ?? summary?.qris_fee),
     },
     platformShare: {
-      total: numeric(platformShare.total),
-      fromTickets: numeric(platformShare.fromTickets),
-      fromVoting: numeric(platformShare.fromVoting),
-      ticketGrossRevenue: numeric(platformShare.ticketGrossRevenue),
-      votingGrossRevenue: numeric(platformShare.votingGrossRevenue),
+      total: numeric(platformShare.total ?? platformShare.platformShare ?? platformShare.platform_share),
+      fromTickets: numeric(platformShare.fromTickets ?? platformShare.from_tickets),
+      fromVoting: numeric(platformShare.fromVoting ?? platformShare.from_voting),
+      ticketGrossRevenue: numeric(platformShare.ticketGrossRevenue ?? platformShare.ticket_gross_revenue),
+      votingGrossRevenue: numeric(platformShare.votingGrossRevenue ?? platformShare.voting_gross_revenue),
     },
     packagePayments: {
-      total: numeric(packagePayments.total),
-      byTier: packagePayments.byTier && typeof packagePayments.byTier === 'object'
+      total: numeric(packagePayments.total ?? packagePayments.packagePayments ?? packagePayments.package_payments),
+      byTier: tierBreakdown && typeof tierBreakdown === 'object'
         ? Object.fromEntries(
-            Object.entries(packagePayments.byTier).map(([tier, value]) => [tier, numeric(value)]),
+            Object.entries(tierBreakdown).map(([tier, value]) => [tier, numeric(value)]),
           )
         : {},
     },
@@ -1800,6 +1812,16 @@ const syncSimpaskorSummary = async () => {
   const summary = extractSummaryFromPayload(result.payload);
   await upsertSimpaskorMetric('summary', summary.totalSimpaskorBalance, summary);
   await upsertSimpaskorMetric('admin_fee_qris', summary.adminFee.qrisFee, null);
+  if (summary.totalSimpaskorBalance > 0) {
+    await prisma.revenueSource.update({
+      where: { id: 'simpaskor' },
+      data: {
+        currentBalance: summary.totalSimpaskorBalance,
+        status: 'sinkron',
+        lastSyncedAt: new Date(),
+      },
+    });
+  }
   return { ok: true, summary };
 };
 
@@ -1854,7 +1876,18 @@ const getSimpaskorBreakdown = async () => {
     readSimpaskorMetric('revenue_share_balances'),
   ]);
 
-  const adminFee = Number(adminFeeAgg._sum.amount ?? 0);
+  const cachedSummary = summaryMetric?.jsonValue ?? null;
+  const cachedBalances = balancesMetric?.jsonValue ?? null;
+  const hasSummaryBreakdown = Number(cachedSummary?.totalSimpaskorBalance ?? 0) > 0;
+  const summaryAdminFee = Number(cachedSummary?.adminFee?.total ?? 0);
+  const summaryPlatformShare = Number(cachedSummary?.platformShare?.total ?? 0);
+  const summaryPackagePayments = Number(cachedSummary?.packagePayments?.total ?? 0);
+  const hasSummaryParts = hasSummaryBreakdown
+    && (summaryAdminFee + summaryPlatformShare + summaryPackagePayments) > 0;
+  const summaryPlatformGross = Number(cachedSummary?.platformShare?.ticketGrossRevenue ?? 0)
+    + Number(cachedSummary?.platformShare?.votingGrossRevenue ?? 0);
+
+  const adminFeeFromRows = Number(adminFeeAgg._sum.amount ?? 0);
   let platformShare = 0;
   let packagePayments = 0;
   let platformGross = 0;
@@ -1872,6 +1905,19 @@ const getSimpaskorBreakdown = async () => {
     }
   }
 
+  const adminFee = hasSummaryParts
+    ? summaryAdminFee
+    : adminFeeFromRows;
+  platformShare = hasSummaryParts
+    ? summaryPlatformShare
+    : platformShare;
+  packagePayments = hasSummaryParts
+    ? summaryPackagePayments
+    : packagePayments;
+  platformGross = hasSummaryBreakdown && summaryPlatformGross > 0
+    ? summaryPlatformGross
+    : platformGross;
+
   const effectiveSharePercent = platformGross > 0
     ? Math.round((platformShare / platformGross) * 10000) / 100
     : null;
@@ -1880,9 +1926,10 @@ const getSimpaskorBreakdown = async () => {
     : null;
 
   const bagiHasil = platformShare + packagePayments;
-  const cachedSummary = summaryMetric?.jsonValue ?? null;
-  const cachedBalances = balancesMetric?.jsonValue ?? null;
   const qrisFee = Number(cachedSummary?.adminFee?.qrisFee ?? 0);
+  const total = hasSummaryBreakdown
+    ? Number(cachedSummary.totalSimpaskorBalance)
+    : adminFee + bagiHasil;
 
   return {
     adminFee,
@@ -1890,7 +1937,7 @@ const getSimpaskorBreakdown = async () => {
     platformShare,
     packagePayments,
     bagiHasil,
-    total: adminFee + bagiHasil,
+    total,
     platformGross,
     sharePercent: {
       effective: effectiveSharePercent,
