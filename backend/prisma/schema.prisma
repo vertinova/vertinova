@@ -75,6 +75,17 @@ model AdminFee {
   @@map("admin_fees")
 }
 
+model SimpaskorMetric {
+  id           BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  metricKey    String   @unique @map("metric_key") @db.VarChar(80)
+  numericValue Decimal  @default(0) @map("numeric_value") @db.Decimal(18, 2)
+  jsonValue    Json?    @map("json_value")
+  fetchedAt    DateTime @default(now()) @map("fetched_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("simpaskor_metrics")
+}
+
 model PlatformRevenue {
   id            BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
   externalId    String   @unique @map("external_id") @db.VarChar(160)

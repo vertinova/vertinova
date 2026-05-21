@@ -394,6 +394,19 @@ const ensurePlatformRevenueSchema = async () => {
   }
 };
 
+const ensureSimpaskorMetricsSchema = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS simpaskor_metrics (
+      id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+      metric_key VARCHAR(80) NOT NULL UNIQUE,
+      numeric_value DECIMAL(18, 2) NOT NULL DEFAULT 0,
+      json_value JSON NULL,
+      fetched_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+};
+
 const ensureSuperAdmin = async () => {
   const username = parseUsername(process.env.SUPER_ADMIN_USERNAME ?? 'serigala');
   const email = String(process.env.SUPER_ADMIN_EMAIL ?? '').trim().toLowerCase() || null;
@@ -1652,8 +1665,179 @@ const listSimpaskorPlatformRevenue = async (searchParams = new URLSearchParams()
   };
 };
 
+const buildSimpaskorEndpointUrl = (rawValue, defaultPath) => {
+  const raw = rawValue ?? defaultPath;
+  if (!raw) return '';
+  const url = new URL(resolveSimpaskorUrl(raw));
+  return url.toString();
+};
+
+const fetchSimpaskorEndpoint = async (url) => {
+  if (!url) {
+    return { ok: false, status: 0, payload: {}, message: 'URL Simpaskor belum diatur.' };
+  }
+
+  const apiKey = process.env.SIMPASKOR_API_KEY ?? '';
+  const headerName = process.env.SIMPASKOR_API_KEY_HEADER ?? 'X-API-Key';
+  const headers = { Accept: 'application/json' };
+  if (apiKey) headers[headerName] = apiKey;
+
+  try {
+    const response = await fetchWithRetry(url, { headers });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { ok: false, status: response.status, payload, message: `Status ${response.status}.` };
+    }
+    return { ok: true, status: response.status, payload };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      payload: {},
+      message: error instanceof Error ? error.message : 'Gagal menghubungi API Simpaskor.',
+    };
+  }
+};
+
+const upsertSimpaskorMetric = async (metricKey, numericValue, jsonValue) =>
+  prisma.simpaskorMetric.upsert({
+    where: { metricKey },
+    create: {
+      metricKey,
+      numericValue: Number.isFinite(numericValue) ? numericValue : 0,
+      jsonValue,
+      fetchedAt: new Date(),
+    },
+    update: {
+      numericValue: Number.isFinite(numericValue) ? numericValue : 0,
+      jsonValue,
+      fetchedAt: new Date(),
+    },
+  });
+
+const extractSummaryFromPayload = (payload) => {
+  const summary = payload?.summary ?? payload ?? {};
+  const adminFee = summary?.adminFee ?? {};
+  const platformShare = summary?.platformShare ?? {};
+  const packagePayments = summary?.packagePayments ?? {};
+  const numeric = (value) => {
+    const amount = normalizeAmount(value);
+    return Number.isFinite(amount) ? amount : 0;
+  };
+  return {
+    currency: payload?.currency ?? 'IDR',
+    totalSimpaskorBalance: numeric(summary?.totalSimpaskorBalance),
+    adminFee: {
+      total: numeric(adminFee.total),
+      ticket: numeric(adminFee.ticket),
+      voting: numeric(adminFee.voting),
+      registration: numeric(adminFee.registration),
+      qrisFee: numeric(adminFee.qrisFee ?? summary?.qrisFee ?? adminFee?.qris_fee),
+    },
+    platformShare: {
+      total: numeric(platformShare.total),
+      fromTickets: numeric(platformShare.fromTickets),
+      fromVoting: numeric(platformShare.fromVoting),
+      ticketGrossRevenue: numeric(platformShare.ticketGrossRevenue),
+      votingGrossRevenue: numeric(platformShare.votingGrossRevenue),
+    },
+    packagePayments: {
+      total: numeric(packagePayments.total),
+      byTier: packagePayments.byTier && typeof packagePayments.byTier === 'object'
+        ? Object.fromEntries(
+            Object.entries(packagePayments.byTier).map(([tier, value]) => [tier, numeric(value)]),
+          )
+        : {},
+    },
+  };
+};
+
+const extractRevenueShareBalancesFromPayload = (payload) => {
+  const summary = payload?.summary ?? {};
+  const numeric = (value) => {
+    const amount = normalizeAmount(value);
+    return Number.isFinite(amount) ? amount : 0;
+  };
+  return {
+    currency: payload?.currency ?? 'IDR',
+    scope: payload?.filters?.scope ?? 'lifetime',
+    summary: {
+      grossRevenue: numeric(summary.grossRevenue),
+      ticketGrossRevenue: numeric(summary.ticketGrossRevenue),
+      votingGrossRevenue: numeric(summary.votingGrossRevenue),
+      platformShare: numeric(summary.platformShare),
+      panitiaShare: numeric(summary.panitiaShare),
+      ticketRevenue: numeric(summary.ticketRevenue),
+      votingRevenue: numeric(summary.votingRevenue),
+      totalWithdrawn: numeric(summary.totalWithdrawn),
+      totalPending: numeric(summary.totalPending),
+      activeBalance: numeric(summary.activeBalance),
+      lockedPlatformShare: numeric(summary.lockedPlatformShare),
+      activePlatformShare: numeric(summary.activePlatformShare),
+    },
+    counts: {
+      events: Number(payload?.counts?.events ?? 0),
+      revenueShares: Number(payload?.counts?.revenueShares ?? 0),
+    },
+    events: Array.isArray(payload?.events) ? payload.events : [],
+  };
+};
+
+const syncSimpaskorSummary = async () => {
+  const url = buildSimpaskorEndpointUrl(process.env.SIMPASKOR_SUMMARY_URL, '/api/external/summary');
+  const result = await fetchSimpaskorEndpoint(url);
+  if (!result.ok) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId: 'simpaskor',
+        status: 'failed',
+        message: `Summary Simpaskor gagal: ${result.message ?? 'unknown'}.`,
+        responsePayload: result.payload ?? {},
+      },
+    });
+    return { ok: false, message: result.message, summary: null };
+  }
+  const summary = extractSummaryFromPayload(result.payload);
+  await upsertSimpaskorMetric('summary', summary.totalSimpaskorBalance, summary);
+  await upsertSimpaskorMetric('admin_fee_qris', summary.adminFee.qrisFee, null);
+  return { ok: true, summary };
+};
+
+const syncSimpaskorRevenueShareBalances = async () => {
+  const url = buildSimpaskorEndpointUrl(
+    process.env.SIMPASKOR_REVENUE_SHARE_BALANCES_URL,
+    '/api/external/revenue-share-balances',
+  );
+  const result = await fetchSimpaskorEndpoint(url);
+  if (!result.ok) {
+    await prisma.apiSyncLog.create({
+      data: {
+        sourceId: 'simpaskor',
+        status: 'failed',
+        message: `Revenue share balances Simpaskor gagal: ${result.message ?? 'unknown'}.`,
+        responsePayload: result.payload ?? {},
+      },
+    });
+    return { ok: false, message: result.message, balances: null };
+  }
+  const balances = extractRevenueShareBalancesFromPayload(result.payload);
+  await upsertSimpaskorMetric('revenue_share_balances', balances.summary.activeBalance, balances);
+  return { ok: true, balances };
+};
+
+const readSimpaskorMetric = async (metricKey) => {
+  const row = await prisma.simpaskorMetric.findUnique({ where: { metricKey } });
+  if (!row) return null;
+  return {
+    metricKey: row.metricKey,
+    numericValue: Number(row.numericValue ?? 0),
+    jsonValue: row.jsonValue ?? null,
+    fetchedAt: row.fetchedAt,
+  };
+};
+
 const getSimpaskorBreakdown = async () => {
-  const [adminFeeAgg, platformAgg, shareAgg] = await Promise.all([
+  const [adminFeeAgg, platformAgg, shareAgg, summaryMetric, balancesMetric] = await Promise.all([
     prisma.adminFee.aggregate({ _sum: { amount: true } }),
     prisma.platformRevenue.groupBy({
       by: ['kind'],
@@ -1666,6 +1850,8 @@ const getSimpaskorBreakdown = async () => {
       _min: { sharePercent: true },
       _max: { sharePercent: true },
     }),
+    readSimpaskorMetric('summary'),
+    readSimpaskorMetric('revenue_share_balances'),
   ]);
 
   const adminFee = Number(adminFeeAgg._sum.amount ?? 0);
@@ -1694,9 +1880,13 @@ const getSimpaskorBreakdown = async () => {
     : null;
 
   const bagiHasil = platformShare + packagePayments;
+  const cachedSummary = summaryMetric?.jsonValue ?? null;
+  const cachedBalances = balancesMetric?.jsonValue ?? null;
+  const qrisFee = Number(cachedSummary?.adminFee?.qrisFee ?? 0);
 
   return {
     adminFee,
+    qrisFee,
     platformShare,
     packagePayments,
     bagiHasil,
@@ -1714,6 +1904,12 @@ const getSimpaskorBreakdown = async () => {
       platformShare: platformShareCount,
       packagePayments: packageCount,
     },
+    summary: cachedSummary
+      ? { ...cachedSummary, fetchedAt: summaryMetric?.fetchedAt ?? null }
+      : null,
+    revenueShareBalances: cachedBalances
+      ? { ...cachedBalances, fetchedAt: balancesMetric?.fetchedAt ?? null }
+      : null,
   };
 };
 
@@ -1936,6 +2132,8 @@ const syncApiSources = async () => {
   ]);
 
   await syncSimpaskorPlatformRevenue();
+  await syncSimpaskorSummary();
+  await syncSimpaskorRevenueShareBalances();
   const finalSimpaskorAmount = await syncSimpaskorAdminFeeBalance();
 
   return [{ ...simpaskor, amount: finalSimpaskorAmount }, forbasi];
@@ -2136,6 +2334,42 @@ const route = async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/summary') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    const cached = await readSimpaskorMetric('summary');
+    json(response, 200, {
+      sourceId: 'simpaskor',
+      summary: cached?.jsonValue ?? null,
+      fetchedAt: cached?.fetchedAt ?? null,
+    });
+    return;
+  }
+
+  if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-summary') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    const result = await syncSimpaskorSummary();
+    json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
+    return;
+  }
+
+  if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/revenue-share-balances') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    const cached = await readSimpaskorMetric('revenue_share_balances');
+    json(response, 200, {
+      sourceId: 'simpaskor',
+      balances: cached?.jsonValue ?? null,
+      fetchedAt: cached?.fetchedAt ?? null,
+    });
+    return;
+  }
+
+  if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-revenue-share-balances') {
+    if (!requirePermission(user, response, 'finance.dashboard')) return;
+    const result = await syncSimpaskorRevenueShareBalances();
+    json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
+    return;
+  }
+
   if (request.method === 'GET' && request.url === '/api/finance/simpaskor/balance') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     json(response, 200, {
@@ -2260,6 +2494,7 @@ process.on('unhandledRejection', (reason) => {
 await ensureAccessSchema();
 await ensureAdminFeeSchema();
 await ensurePlatformRevenueSchema();
+await ensureSimpaskorMetricsSchema();
 await ensureRevenueSources();
 await prisma.financeTransaction.deleteMany({ where: { externalId: { startsWith: 'sync-' } } });
 await syncSimpaskorAdminFeeBalance();

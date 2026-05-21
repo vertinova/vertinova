@@ -58,8 +58,58 @@ type NavItem = {
   permission: string;
 };
 
+type SimpaskorSummary = {
+  currency?: string;
+  totalSimpaskorBalance: number;
+  adminFee: {
+    total: number;
+    ticket: number;
+    voting: number;
+    registration: number;
+    qrisFee: number;
+  };
+  platformShare: {
+    total: number;
+    fromTickets: number;
+    fromVoting: number;
+    ticketGrossRevenue: number;
+    votingGrossRevenue: number;
+  };
+  packagePayments: {
+    total: number;
+    byTier: Record<string, number>;
+  };
+  fetchedAt?: string | null;
+};
+
+type SimpaskorRevenueShareBalances = {
+  currency?: string;
+  scope?: string;
+  summary: {
+    grossRevenue: number;
+    ticketGrossRevenue: number;
+    votingGrossRevenue: number;
+    platformShare: number;
+    panitiaShare: number;
+    ticketRevenue: number;
+    votingRevenue: number;
+    totalWithdrawn: number;
+    totalPending: number;
+    activeBalance: number;
+    lockedPlatformShare: number;
+    activePlatformShare: number;
+  };
+  counts?: {
+    events: number;
+    revenueShares: number;
+  };
+  events?: unknown[];
+  fetchedAt?: string | null;
+};
+
 type SimpaskorBreakdown = {
   adminFee: number;
+  qrisFee?: number;
   platformShare: number;
   packagePayments: number;
   bagiHasil: number;
@@ -75,6 +125,8 @@ type SimpaskorBreakdown = {
     platformShare: number;
     packagePayments: number;
   };
+  summary?: SimpaskorSummary | null;
+  revenueShareBalances?: SimpaskorRevenueShareBalances | null;
 };
 
 type RevenueSource = {
@@ -1129,6 +1181,12 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
               <span className="db-breakdown-label">Paket Event</span>
               <strong>{formatCurrency(breakdown.packagePayments)}</strong>
             </div>
+            {breakdown.qrisFee && breakdown.qrisFee > 0 ? (
+              <div className="db-breakdown-cell">
+                <span className="db-breakdown-label">QRIS Fee</span>
+                <strong>{formatCurrency(breakdown.qrisFee)}</strong>
+              </div>
+            ) : null}
           </div>
           <p className="db-breakdown-formula">
             Saldo = Admin Fee + Bagi Hasil + Paket Event
@@ -1137,6 +1195,27 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
               ? ` · % bagi hasil ${breakdown.sharePercent.min.toFixed(1)}–${breakdown.sharePercent.max.toFixed(1)}%`
               : ''}
           </p>
+          {breakdown.revenueShareBalances ? (
+            <div className="db-panitia-balance">
+              <p className="db-breakdown-formula">
+                Saldo bagi hasil panitia (lifetime)
+              </p>
+              <div className="db-breakdown-grid">
+                <div className="db-breakdown-cell">
+                  <span className="db-breakdown-label">Aktif</span>
+                  <strong>{formatCurrency(breakdown.revenueShareBalances.summary.activeBalance)}</strong>
+                </div>
+                <div className="db-breakdown-cell">
+                  <span className="db-breakdown-label">Pending</span>
+                  <strong>{formatCurrency(breakdown.revenueShareBalances.summary.totalPending)}</strong>
+                </div>
+                <div className="db-breakdown-cell">
+                  <span className="db-breakdown-label">Sudah Cair</span>
+                  <strong>{formatCurrency(breakdown.revenueShareBalances.summary.totalWithdrawn)}</strong>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : null}
 
