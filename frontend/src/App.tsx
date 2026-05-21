@@ -164,8 +164,11 @@ type ApiSourcePayload = {
   breakdown?: SimpaskorBreakdown | null;
 };
 
+type DetailItemKind = 'admin_fee' | 'platform_share' | 'package_payment';
+
 type DetailItem = {
   id: string;
+  kind?: DetailItemKind;
   type: string;
   title: string;
   subtitle: string;
@@ -174,6 +177,8 @@ type DetailItem = {
   paidAt: string;
   orderId: string;
 };
+
+type DetailKindFilter = 'all' | 'admin_fee' | 'revenue_share';
 
 type TransactionDetailState = Record<ApiSourceId, { error: string; isLoading: boolean; items: DetailItem[] }>;
 
@@ -2772,8 +2777,33 @@ function DetailModal({
   sourceId: 'simpaskor' | 'forbasi';
   onClose: () => void;
 }) {
-  const total = items.reduce((sum, item) => sum + item.adminFee, 0);
+  const [kindFilter, setKindFilter] = useState<DetailKindFilter>('all');
   const title = sourceId === 'simpaskor' ? 'Detail Transaksi Simpaskor' : 'Detail Transaksi Forbasi';
+
+  const isRevenueShare = (item: DetailItem) =>
+    item.kind === 'platform_share' || item.kind === 'package_payment';
+  const isAdminFee = (item: DetailItem) =>
+    item.kind === 'admin_fee' || !item.kind;
+
+  const adminFeeCount = items.filter(isAdminFee).length;
+  const revenueShareCount = items.filter(isRevenueShare).length;
+  const showFilter = sourceId === 'simpaskor' && adminFeeCount > 0 && revenueShareCount > 0;
+
+  const filteredItems = useMemo(() => {
+    if (kindFilter === 'admin_fee') return items.filter(isAdminFee);
+    if (kindFilter === 'revenue_share') return items.filter(isRevenueShare);
+    return items;
+  }, [items, kindFilter]);
+
+  const total = filteredItems.reduce((sum, item) => sum + item.adminFee, 0);
+  const adminFeeTotal = items.filter(isAdminFee).reduce((sum, item) => sum + item.adminFee, 0);
+  const revenueShareTotal = items.filter(isRevenueShare).reduce((sum, item) => sum + item.adminFee, 0);
+
+  const filterOptions: { id: DetailKindFilter; label: string; count: number; total: number }[] = [
+    { id: 'all', label: 'Semua', count: items.length, total: adminFeeTotal + revenueShareTotal },
+    { id: 'admin_fee', label: 'Admin Fee', count: adminFeeCount, total: adminFeeTotal },
+    { id: 'revenue_share', label: 'Bagi Hasil', count: revenueShareCount, total: revenueShareTotal },
+  ];
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -2797,6 +2827,23 @@ function DetailModal({
           <EmptyState icon={BadgeCheck} title="Belum ada transaksi." note="Tidak ada data transaksi yang ditemukan." />
         ) : (
           <>
+            {showFilter ? (
+              <div className="detail-filter-row">
+                {filterOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`filter-chip ${kindFilter === option.id ? 'active' : ''}`}
+                    onClick={() => setKindFilter(option.id)}
+                  >
+                    {option.label}
+                    <span className="filter-chip-meta">
+                      {option.count} · {formatCurrency(option.total)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="table-wrap">
               <table>
                 <thead>
@@ -2810,9 +2857,9 @@ function DetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((item) => (
+                  {filteredItems.map((item) => (
                     <tr key={item.id}>
-                      <td><span className="type-chip">{item.type}</span></td>
+                      <td><span className={`type-chip ${isRevenueShare(item) ? 'type-chip-share' : 'type-chip-fee'}`}>{item.type}</span></td>
                       <td>
                         <div className="detail-cell-title">{item.title}</div>
                         {item.subtitle ? <div className="detail-cell-sub">{item.subtitle}</div> : null}
@@ -2826,7 +2873,7 @@ function DetailModal({
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={3}>Total ({items.length} transaksi)</td>
+                    <td colSpan={3}>Total ({filteredItems.length} transaksi)</td>
                     <td>{formatCurrency(total)}</td>
                     <td colSpan={2} />
                   </tr>

@@ -1231,6 +1231,22 @@
     @apply inline-block rounded-full bg-[#eef2ef] px-2.5 py-1 text-xs font-black text-[#2f7d55] whitespace-nowrap;
   }
 
+  .type-chip-fee {
+    @apply bg-[#eef2ef] text-[#2f7d55];
+  }
+
+  .type-chip-share {
+    @apply bg-[#eaf1ff] text-[#1d4ed8];
+  }
+
+  .detail-filter-row {
+    @apply mx-6 mb-4 flex flex-wrap gap-2;
+  }
+
+  .filter-chip-meta {
+    @apply text-[10px] font-bold uppercase tracking-wide opacity-70;
+  }
+
   .detail-cell-title {
     @apply text-sm font-bold;
   }
