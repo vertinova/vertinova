@@ -1182,10 +1182,6 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
               </span>
               <strong>{formatCurrency(breakdown.platformShare)}</strong>
             </div>
-            <div className="db-breakdown-cell">
-              <span className="db-breakdown-label">Paket Event</span>
-              <strong>{formatCurrency(breakdown.packagePayments)}</strong>
-            </div>
             {breakdown.qrisFee && breakdown.qrisFee > 0 ? (
               <div className="db-breakdown-cell">
                 <span className="db-breakdown-label">QRIS Fee</span>
@@ -1194,7 +1190,7 @@ function DbApiPanel({ source, totalIncome }: { source: RevenueSource | undefined
             ) : null}
           </div>
           <p className="db-breakdown-formula">
-            Saldo = Admin Fee + Bagi Hasil + Paket Event
+            Saldo = Admin Fee + Bagi Hasil
             {breakdown.sharePercent?.min != null && breakdown.sharePercent.max != null
               && breakdown.sharePercent.min !== breakdown.sharePercent.max
               ? ` · % bagi hasil ${breakdown.sharePercent.min.toFixed(1)}–${breakdown.sharePercent.max.toFixed(1)}%`
@@ -1782,6 +1778,21 @@ function TransactionsView({
         </div>
       </article>
 
+      {(() => {
+        const simpaskor = sources.find((source) => source.id === 'simpaskor');
+        const breakdown = simpaskor?.breakdown;
+        const showInFilter = selectedSources.length === 0 || selectedSources.includes('simpaskor');
+        if (!breakdown || !showInFilter) return null;
+        if ((breakdown.platformShare ?? 0) <= 0) return null;
+        return (
+          <SimpaskorRevenueShareSummaryCard
+            breakdown={breakdown}
+            shareRatio={shareRatio}
+            isShareMode={isShareMode}
+          />
+        );
+      })()}
+
       {filtered.length === 0 ? (
         <article className="panel">
           <EmptyState
@@ -1853,6 +1864,51 @@ function TransactionsView({
         </>
       )}
     </section>
+  );
+}
+
+function SimpaskorRevenueShareSummaryCard({
+  breakdown,
+  shareRatio,
+  isShareMode,
+}: {
+  breakdown: SimpaskorBreakdown;
+  shareRatio: number;
+  isShareMode: boolean;
+}) {
+  const platformShare = breakdown.platformShare ?? 0;
+  if (platformShare <= 0) return null;
+
+  const display = (value: number) => (isShareMode ? Math.round(value * shareRatio) : value);
+
+  return (
+    <article className="panel revenue-share-summary-panel">
+      <PanelTitle
+        eyebrow={isShareMode ? `Bagi Hasil Simpaskor (${Math.round(shareRatio * 100)}% bagian Anda)` : 'Bagi Hasil Simpaskor'}
+        title="Total bagi hasil tiket & voting"
+      />
+      <div className="transaction-overview-grid">
+        <div>
+          <span>
+            Total bagi hasil
+            {breakdown.sharePercent?.effective != null
+              ? ` (${breakdown.sharePercent.effective.toFixed(1)}%)`
+              : ''}
+          </span>
+          <strong>{formatCurrency(display(platformShare))}</strong>
+          {isShareMode ? <small className="overview-sub">dari {formatCurrency(platformShare)}</small> : null}
+        </div>
+        {breakdown.counts?.platformShare ? (
+          <div>
+            <span>Jumlah transaksi bagi hasil</span>
+            <strong>{breakdown.counts.platformShare}</strong>
+          </div>
+        ) : null}
+      </div>
+      <p className="revenue-share-note">
+        Bagi hasil tidak ditampilkan per transaksi karena cukup dilihat sebagai total. Detail tetap tersinkron di backend dan dipakai untuk perhitungan saldo Simpaskor.
+      </p>
+    </article>
   );
 }
 

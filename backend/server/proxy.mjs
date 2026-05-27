@@ -231,6 +231,14 @@ const excludeSyncSnapshots = {
   NOT: { externalId: { startsWith: 'sync-' } },
 };
 
+const transactionListFilter = {
+  NOT: [
+    { externalId: { startsWith: 'sync-' } },
+    { externalId: { startsWith: 'ps-' } },
+    { externalId: { startsWith: 'pp-' } },
+  ],
+};
+
 const totalVerifiedIncome = async () => {
   const result = await prisma.revenueSource.aggregate({
     _sum: { currentBalance: true },
@@ -1016,7 +1024,7 @@ const getSourcesFromDb = async () => {
 
 const getTransactionsFromDb = async () => {
   const rows = await prisma.financeTransaction.findMany({
-    where: excludeSyncSnapshots,
+    where: transactionListFilter,
     orderBy: { occurredAt: 'desc' },
     include: { source: { select: { name: true } } },
   });
@@ -1167,10 +1175,28 @@ const normalizeAdminFeeEntries = (payload) =>
     })
     .filter((entry) => entry.orderId && Number.isFinite(entry.amount) && entry.amount > 0);
 
+const computeSimpaskorBalanceFromDb = async () => {
+  const result = await prisma.financeTransaction.aggregate({
+    where: {
+      sourceId: 'simpaskor',
+      direction: 'income',
+      NOT: [
+        { externalId: { startsWith: 'sync-' } },
+        { externalId: { startsWith: 'pp-' } },
+      ],
+    },
+    _sum: { amount: true },
+  });
+  return Number(result._sum.amount ?? 0);
+};
+
 const syncSimpaskorAdminFeeBalance = async () => {
   const summaryMetric = await readSimpaskorMetric('summary');
-  const summaryTotal = Number(summaryMetric?.jsonValue?.totalSimpaskorBalance ?? summaryMetric?.numericValue ?? 0);
-  const amount = summaryTotal > 0 ? summaryTotal : await totalIncomeBySource('simpaskor');
+  const summary = summaryMetric?.jsonValue ?? null;
+  const summaryAmount = summary
+    ? Number(summary?.adminFee?.total ?? 0) + Number(summary?.platformShare?.total ?? 0)
+    : 0;
+  const amount = summaryAmount > 0 ? summaryAmount : await computeSimpaskorBalanceFromDb();
   await prisma.revenueSource.update({
     where: { id: 'simpaskor' },
     data: {
@@ -1812,16 +1838,7 @@ const syncSimpaskorSummary = async () => {
   const summary = extractSummaryFromPayload(result.payload);
   await upsertSimpaskorMetric('summary', summary.totalSimpaskorBalance, summary);
   await upsertSimpaskorMetric('admin_fee_qris', summary.adminFee.qrisFee, null);
-  if (summary.totalSimpaskorBalance > 0) {
-    await prisma.revenueSource.update({
-      where: { id: 'simpaskor' },
-      data: {
-        currentBalance: summary.totalSimpaskorBalance,
-        status: 'sinkron',
-        lastSyncedAt: new Date(),
-      },
-    });
-  }
+  await syncSimpaskorAdminFeeBalance();
   return { ok: true, summary };
 };
 
@@ -1925,11 +1942,9 @@ const getSimpaskorBreakdown = async () => {
     ? Math.round(Number(shareAgg._avg.sharePercent) * 100) / 100
     : null;
 
-  const bagiHasil = platformShare + packagePayments;
+  const bagiHasil = platformShare;
   const qrisFee = Number(cachedSummary?.adminFee?.qrisFee ?? 0);
-  const total = hasSummaryBreakdown
-    ? Number(cachedSummary.totalSimpaskorBalance)
-    : adminFee + bagiHasil;
+  const total = adminFee + bagiHasil;
 
   return {
     adminFee,
@@ -2455,15 +2470,21 @@ const route = async (request, response) => {
         listSimpaskorPlatformRevenue(currentUrl.searchParams),
         getSimpaskorBreakdown(),
       ]);
-      const items = [...adminFees.items, ...platformRevenue.items].sort(
+      const items = adminFees.items.slice().sort(
         (a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime(),
       );
       json(response, 200, {
         sourceId: 'simpaskor',
         items,
-        total: adminFees.total + platformRevenue.total,
+        total: adminFees.total,
         count: items.length,
         breakdown,
+        revenueShareSummary: {
+          total: platformRevenue.total,
+          count: platformRevenue.count,
+          platformShare: platformRevenue.breakdown?.platform_share ?? { total: 0, count: 0 },
+          packagePayments: platformRevenue.breakdown?.package_payment ?? { total: 0, count: 0 },
+        },
       });
       return;
     }
