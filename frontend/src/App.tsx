@@ -1031,18 +1031,25 @@ function DashboardView({
   const forbasi = sources.find((s) => s.id === 'forbasi');
   const manualSources = sources.filter((s) => s.category === 'manual');
 
+  const sharePercent = user.revenueSharePercent ?? 0;
+  const isSuperAdmin = user.role === 'serigala' || user.role === 'super_admin';
+  const isShareMode = !isSuperAdmin && sharePercent > 0;
+  const accountIncome = Math.round(totalIncome * sharePercent / 100);
+  const heroTotal = isShareMode ? accountIncome : totalIncome;
   const simpaskorPct = totalIncome > 0 ? (simpaskor?.amount ?? 0) / totalIncome * 100 : 0;
   const forbasiPct = totalIncome > 0 ? (forbasi?.amount ?? 0) / totalIncome * 100 : 0;
   const manualPct = Math.max(0, 100 - simpaskorPct - forbasiPct);
-  const accountIncome = Math.round(totalIncome * (user.revenueSharePercent ?? 0) / 100);
 
   return (
     <>
       {/* ── Hero ── */}
       <motion.section className="db-hero" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
         <div className="db-hero-left">
-          <p className="db-hero-eyebrow">Total saldo masuk</p>
-          <strong className="db-hero-total">{formatCurrency(totalIncome)}</strong>
+          <p className="db-hero-eyebrow">{isShareMode ? `Bagian Anda (${sharePercent}%)` : 'Total saldo masuk'}</p>
+          <strong className="db-hero-total">{formatCurrency(heroTotal)}</strong>
+          {isShareMode ? (
+            <p className="db-hero-sub">dari total pendapatan {formatCurrency(totalIncome)}</p>
+          ) : null}
           <div className="db-breakdown-bar">
             <span style={{ width: `${simpaskorPct}%`, backgroundColor: '#16a34a' }} title={`Simpaskor ${simpaskorPct.toFixed(1)}%`} />
             <span style={{ width: `${forbasiPct}%`, backgroundColor: '#2563eb' }} title={`Forbasi ${forbasiPct.toFixed(1)}%`} />
@@ -1076,11 +1083,13 @@ function DashboardView({
             <strong>{verifiedCount}/{transactions.length}</strong>
             <span>Terverifikasi</span>
           </div>
-          <div className="db-stat">
-            <WalletCards size={18} />
-            <strong>{formatCurrency(accountIncome)}</strong>
-            <span>Bagian Anda {user.revenueSharePercent ?? 0}%</span>
-          </div>
+          {!isShareMode ? (
+            <div className="db-stat">
+              <WalletCards size={18} />
+              <strong>{formatCurrency(accountIncome)}</strong>
+              <span>Bagian Anda {sharePercent}%</span>
+            </div>
+          ) : null}
         </div>
       </motion.section>
 

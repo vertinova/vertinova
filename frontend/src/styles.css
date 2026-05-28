@@ -1078,6 +1078,10 @@
     @apply text-[clamp(2rem,4vw,3.2rem)] font-black leading-none text-white;
   }
 
+  .db-hero-sub {
+    @apply text-xs font-semibold text-white/60;
+  }
+
   .db-breakdown-bar {
     @apply flex h-2.5 overflow-hidden rounded-full bg-white/10;
     gap: 2px;
