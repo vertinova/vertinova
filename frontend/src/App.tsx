@@ -1026,19 +1026,31 @@ function DashboardView({
   verifiedCount: number;
   onExportTransactions: () => void;
 }) {
-  const connectedCount = sources.filter((s) => s.status === 'Sinkron').length;
-  const simpaskor = sources.find((s) => s.id === 'simpaskor');
-  const forbasi = sources.find((s) => s.id === 'forbasi');
-  const manualSources = sources.filter((s) => s.category === 'manual');
+  const isSuperAdmin = user.role === 'serigala' || user.role === 'super_admin';
+  const permissionSet = new Set(user.permissions ?? []);
+  const canSimpaskor = isSuperAdmin || permissionSet.has('source.simpaskor');
+  const canForbasi = isSuperAdmin || permissionSet.has('source.forbasi');
+  const canManual = isSuperAdmin || permissionSet.has('source.manual');
+
+  const simpaskor = canSimpaskor ? sources.find((s) => s.id === 'simpaskor') : undefined;
+  const forbasi = canForbasi ? sources.find((s) => s.id === 'forbasi') : undefined;
+  const manualSources = canManual ? sources.filter((s) => s.category === 'manual') : [];
+  const hasSimpaskor = Boolean(simpaskor);
+  const hasForbasi = Boolean(forbasi);
+  const hasManual = manualSources.length > 0;
+
+  const apiSources = sources.filter((s) => s.category === 'api' && (s.id !== 'simpaskor' || canSimpaskor) && (s.id !== 'forbasi' || canForbasi));
+  const apiSourcesTotal = apiSources.length;
+  const connectedCount = apiSources.filter((s) => s.status === 'Sinkron').length;
 
   const sharePercent = user.revenueSharePercent ?? 0;
-  const isSuperAdmin = user.role === 'serigala' || user.role === 'super_admin';
   const isShareMode = !isSuperAdmin && sharePercent > 0;
   const accountIncome = Math.round(totalIncome * sharePercent / 100);
   const heroTotal = isShareMode ? accountIncome : totalIncome;
   const simpaskorPct = totalIncome > 0 ? (simpaskor?.amount ?? 0) / totalIncome * 100 : 0;
   const forbasiPct = totalIncome > 0 ? (forbasi?.amount ?? 0) / totalIncome * 100 : 0;
-  const manualPct = Math.max(0, 100 - simpaskorPct - forbasiPct);
+  const manualTotal = manualSources.reduce((sum, s) => sum + s.amount, 0);
+  const manualPctShown = totalIncome > 0 ? (manualTotal / totalIncome) * 100 : 0;
 
   return (
     <>
@@ -1051,33 +1063,39 @@ function DashboardView({
             <p className="db-hero-sub">dari total pendapatan {formatCurrency(totalIncome)}</p>
           ) : null}
           <div className="db-breakdown-bar">
-            <span style={{ width: `${simpaskorPct}%`, backgroundColor: '#16a34a' }} title={`Simpaskor ${simpaskorPct.toFixed(1)}%`} />
-            <span style={{ width: `${forbasiPct}%`, backgroundColor: '#2563eb' }} title={`Forbasi ${forbasiPct.toFixed(1)}%`} />
-            <span style={{ width: `${manualPct}%`, backgroundColor: '#d97706' }} title={`Manual ${manualPct.toFixed(1)}%`} />
+            {hasSimpaskor ? <span style={{ width: `${simpaskorPct}%`, backgroundColor: '#16a34a' }} title={`Simpaskor ${simpaskorPct.toFixed(1)}%`} /> : null}
+            {hasForbasi ? <span style={{ width: `${forbasiPct}%`, backgroundColor: '#2563eb' }} title={`Forbasi ${forbasiPct.toFixed(1)}%`} /> : null}
+            {hasManual ? <span style={{ width: `${manualPctShown}%`, backgroundColor: '#d97706' }} title={`Manual ${manualPctShown.toFixed(1)}%`} /> : null}
           </div>
           <div className="db-hero-legend">
-            <span><i style={{ backgroundColor: '#16a34a' }} />Simpaskor {formatCurrency(simpaskor?.amount ?? 0)}</span>
-            <span><i style={{ backgroundColor: '#2563eb' }} />Forbasi {formatCurrency(forbasi?.amount ?? 0)}</span>
-            <span><i style={{ backgroundColor: '#d97706' }} />Manual {formatCurrency(manualIncome)}</span>
+            {hasSimpaskor ? <span><i style={{ backgroundColor: '#16a34a' }} />Simpaskor {formatCurrency(simpaskor?.amount ?? 0)}</span> : null}
+            {hasForbasi ? <span><i style={{ backgroundColor: '#2563eb' }} />Forbasi {formatCurrency(forbasi?.amount ?? 0)}</span> : null}
+            {hasManual ? <span><i style={{ backgroundColor: '#d97706' }} />Manual {formatCurrency(manualTotal)}</span> : null}
           </div>
           <p className="db-hero-note">{syncMessage}</p>
         </div>
         <div className="db-hero-stats">
-          <div className="db-stat">
-            <Banknote size={18} />
-            <strong>{formatCurrency(apiIncome)}</strong>
-            <span>Saldo API</span>
-          </div>
-          <div className="db-stat">
-            <Landmark size={18} />
-            <strong>{formatCurrency(manualIncome)}</strong>
-            <span>Saldo manual</span>
-          </div>
-          <div className="db-stat">
-            <PlugZap size={18} />
-            <strong>{connectedCount}/2</strong>
-            <span>API sinkron</span>
-          </div>
+          {apiSourcesTotal > 0 ? (
+            <div className="db-stat">
+              <Banknote size={18} />
+              <strong>{formatCurrency(apiIncome)}</strong>
+              <span>Saldo API</span>
+            </div>
+          ) : null}
+          {hasManual ? (
+            <div className="db-stat">
+              <Landmark size={18} />
+              <strong>{formatCurrency(manualIncome)}</strong>
+              <span>Saldo manual</span>
+            </div>
+          ) : null}
+          {apiSourcesTotal > 0 ? (
+            <div className="db-stat">
+              <PlugZap size={18} />
+              <strong>{connectedCount}/{apiSourcesTotal}</strong>
+              <span>API sinkron</span>
+            </div>
+          ) : null}
           <div className="db-stat">
             <BadgeCheck size={18} />
             <strong>{verifiedCount}/{transactions.length}</strong>
@@ -1095,9 +1113,9 @@ function DashboardView({
 
       {/* ── Sumber ── */}
       <section className="db-sources-row">
-        <DbApiPanel source={simpaskor} totalIncome={totalIncome} />
-        <DbApiPanel source={forbasi} totalIncome={totalIncome} />
-        <DbManualPanel sources={manualSources} totalIncome={totalIncome} />
+        {hasSimpaskor ? <DbApiPanel source={simpaskor} totalIncome={totalIncome} /> : null}
+        {hasForbasi ? <DbApiPanel source={forbasi} totalIncome={totalIncome} /> : null}
+        {hasManual ? <DbManualPanel sources={manualSources} totalIncome={totalIncome} /> : null}
       </section>
 
       {/* ── Charts ── */}
