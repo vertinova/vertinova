@@ -724,35 +724,56 @@ function App() {
     setRoutePath('/admin');
   }, [authToken, authedFetch]);
 
+  const accessibleSources = useMemo(() => {
+    if (!user) return sources;
+    const isSuper = user.role === 'serigala' || user.role === 'super_admin';
+    if (isSuper) return sources;
+    const perms = new Set(user.permissions ?? []);
+    return sources.filter((source) => {
+      if (source.id === 'simpaskor') return perms.has('source.simpaskor');
+      if (source.id === 'forbasi') return perms.has('source.forbasi');
+      if (source.category === 'manual') return perms.has('source.manual');
+      return false;
+    });
+  }, [sources, user]);
+
+  const accessibleTransactions = useMemo(() => {
+    if (!user) return transactions;
+    const isSuper = user.role === 'serigala' || user.role === 'super_admin';
+    if (isSuper) return transactions;
+    const allowedIds = new Set(accessibleSources.map((s) => s.id));
+    return transactions.filter((tx) => allowedIds.has(tx.sourceId));
+  }, [transactions, user, accessibleSources]);
+
   const filteredSources = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return sources;
-    return sources.filter((source) =>
+    if (!keyword) return accessibleSources;
+    return accessibleSources.filter((source) =>
       [source.name, source.status, source.description, source.message ?? ''].join(' ').toLowerCase().includes(keyword),
     );
-  }, [query, sources]);
+  }, [query, accessibleSources]);
 
   const filteredTransactions = useMemo(() => {
     const keyword = query.trim().toLowerCase();
-    if (!keyword) return transactions;
-    return transactions.filter((transaction) =>
+    if (!keyword) return accessibleTransactions;
+    return accessibleTransactions.filter((transaction) =>
       [transaction.id, transaction.sourceId, transaction.source, transaction.description, transaction.status]
         .join(' ')
         .toLowerCase()
         .includes(keyword),
     );
-  }, [query, transactions]);
+  }, [query, accessibleTransactions]);
 
-  const totalIncome = useMemo(() => sources.reduce((sum, source) => sum + source.amount, 0), [sources]);
+  const totalIncome = useMemo(() => accessibleSources.reduce((sum, source) => sum + source.amount, 0), [accessibleSources]);
   const apiIncome = useMemo(
-    () => sources.filter((source) => source.category === 'api').reduce((sum, source) => sum + source.amount, 0),
-    [sources],
+    () => accessibleSources.filter((source) => source.category === 'api').reduce((sum, source) => sum + source.amount, 0),
+    [accessibleSources],
   );
   const manualIncome = totalIncome - apiIncome;
-  const verifiedCount = transactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
-  const connectedCount = sources.filter((source) => source.status === 'Sinkron').length;
-  const apiSources = sources.filter((source) => source.category === 'api');
-  const sourceChart = sources.map((source) => ({ name: source.name, value: source.amount, color: source.color }));
+  const verifiedCount = accessibleTransactions.filter((transaction) => transaction.status === 'Terverifikasi').length;
+  const connectedCount = accessibleSources.filter((source) => source.status === 'Sinkron').length;
+  const apiSources = accessibleSources.filter((source) => source.category === 'api');
+  const sourceChart = accessibleSources.map((source) => ({ name: source.name, value: source.amount, color: source.color }));
   const currentCashflow = emptyCashflow.map((row, index) =>
     index === emptyCashflow.length - 1 ? { ...row, income: toMillions(totalIncome) } : row,
   );
@@ -900,7 +921,7 @@ function App() {
             sourceChart={sourceChart}
             syncMessage={syncMessage}
             totalIncome={totalIncome}
-            transactions={transactions}
+            transactions={accessibleTransactions}
             user={user}
             verifiedCount={verifiedCount}
             onExportTransactions={exportTransactions}
@@ -909,7 +930,7 @@ function App() {
 
         {activeView === 'transactions' ? (
           <TransactionsView
-            sources={sources}
+            sources={accessibleSources}
             transactions={filteredTransactions}
             user={user}
             onExportTransactions={exportTransactions}
@@ -921,9 +942,9 @@ function App() {
           <ReportsView
             apiIncome={apiIncome}
             manualIncome={manualIncome}
-            sources={sources}
+            sources={accessibleSources}
             totalIncome={totalIncome}
-            transactions={transactions}
+            transactions={accessibleTransactions}
             onExportSources={exportSources}
             onExportTransactions={exportTransactions}
           />
@@ -1031,6 +1052,9 @@ function DashboardView({
   const canSimpaskor = isSuperAdmin || permissionSet.has('source.simpaskor');
   const canForbasi = isSuperAdmin || permissionSet.has('source.forbasi');
   const canManual = isSuperAdmin || permissionSet.has('source.manual');
+  const allowedApiSourceIds = isSuperAdmin
+    ? null
+    : [canSimpaskor ? 'simpaskor' : null, canForbasi ? 'forbasi' : null].filter((id): id is string => id !== null);
 
   const simpaskor = canSimpaskor ? sources.find((s) => s.id === 'simpaskor') : undefined;
   const forbasi = canForbasi ? sources.find((s) => s.id === 'forbasi') : undefined;
@@ -1160,7 +1184,12 @@ function DashboardView({
       </section>
 
       {/* ── Transaksi terbaru ── */}
-      <ReconciliationView compact transactions={filteredTransactions.slice(0, 8)} onExportTransactions={onExportTransactions} />
+      <ReconciliationView
+        compact
+        transactions={filteredTransactions.slice(0, 8)}
+        allowedSourceIds={allowedApiSourceIds}
+        onExportTransactions={onExportTransactions}
+      />
     </>
   );
 }
@@ -2142,13 +2171,16 @@ function ReconciliationView({
   compact = false,
   sourceTotals,
   transactions,
+  allowedSourceIds,
   onExportTransactions,
 }: {
   compact?: boolean;
   sourceTotals?: Partial<Record<ApiSourceId, number>>;
   transactions: Transaction[];
+  allowedSourceIds?: string[] | null;
   onExportTransactions: () => void;
 }) {
+  const isAllowed = (id: string) => allowedSourceIds == null || allowedSourceIds.includes(id);
   const apiTransactionGroups = [
     {
       id: 'simpaskor' as const,
@@ -2162,7 +2194,7 @@ function ReconciliationView({
       color: '#2563eb',
       transactions: transactions.filter((transaction) => transaction.sourceId === 'forbasi'),
     },
-  ];
+  ].filter((group) => isAllowed(group.id));
   const otherTransactions = transactions.filter(
     (transaction) => transaction.sourceId !== 'simpaskor' && transaction.sourceId !== 'forbasi',
   );
