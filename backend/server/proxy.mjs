@@ -74,10 +74,20 @@ const permissionCatalog = [
   { id: 'finance.reports', label: 'Ekspor laporan', feature: 'reports' },
   { id: 'accounts.manage', label: 'Manajemen akun', feature: 'accounts' },
   { id: 'revenue_shares.manage', label: 'Pembagian persentase', feature: 'revenueShares' },
+  { id: 'source.simpaskor', label: 'Sumber Simpaskor', feature: 'sources' },
+  { id: 'source.forbasi', label: 'Sumber Forbasi', feature: 'sources' },
+  { id: 'source.manual', label: 'Sumber Manual (Desa, Sekolah, Swasta)', feature: 'sources' },
 ];
 
+const sourcePermissionMap = {
+  'source.simpaskor': ['simpaskor'],
+  'source.forbasi': ['forbasi'],
+  'source.manual': ['desa', 'sekolah', 'swasta'],
+};
+const sourcePermissionIds = Object.keys(sourcePermissionMap);
+
 const allPermissionIds = permissionCatalog.map((permission) => permission.id);
-const defaultAccountPermissions = ['finance.dashboard'];
+const defaultAccountPermissions = ['finance.dashboard', 'source.simpaskor', 'source.forbasi', 'source.manual'];
 const superAdminRoles = new Set(['serigala', 'super_admin']);
 
 const loginAttempts = new Map();
@@ -196,6 +206,30 @@ const getPermissionIds = (user) => {
 };
 
 const canUse = (user, permission) => isSuperAdmin(user) || getPermissionIds(user).includes(permission);
+
+const getAllowedSourceIds = (user) => {
+  if (isSuperAdmin(user)) return null;
+  const perms = new Set(getPermissionIds(user));
+  const allowed = new Set();
+  for (const [perm, ids] of Object.entries(sourcePermissionMap)) {
+    if (perms.has(perm)) ids.forEach((id) => allowed.add(id));
+  }
+  return [...allowed];
+};
+
+const filterSources = (sources, allowedIds) => (allowedIds === null ? sources : sources.filter((s) => allowedIds.includes(s.id)));
+const filterTransactions = (transactions, allowedIds) => (allowedIds === null ? transactions : transactions.filter((tx) => allowedIds.includes(tx.sourceId)));
+
+const hasSourceAccess = (user, sourceId) => {
+  const allowed = getAllowedSourceIds(user);
+  return allowed === null || allowed.includes(sourceId);
+};
+
+const requireSourceAccess = (user, response, sourceId) => {
+  if (hasSourceAccess(user, sourceId)) return true;
+  json(response, 403, { message: 'Akun ini tidak memiliki akses ke sumber pendapatan tersebut.' });
+  return false;
+};
 
 const sanitizeUser = (user) => ({
   id: user.id,
@@ -487,6 +521,26 @@ const ensureSuperAdmin = async () => {
     update: {},
   });
   await prisma.userSession.deleteMany({ where: { userId: user.id } });
+};
+
+const backfillSourcePermissions = async () => {
+  const accounts = await prisma.adminUser.findMany({
+    where: { role: { notIn: [...superAdminRoles] } },
+    include: { permissions: true },
+  });
+  const data = [];
+  for (const account of accounts) {
+    const existing = new Set(account.permissions.map((p) => p.permission));
+    const hasAnySourcePerm = sourcePermissionIds.some((id) => existing.has(id));
+    if (hasAnySourcePerm) continue;
+    for (const permission of sourcePermissionIds) {
+      data.push({ userId: account.id, permission, canUse: true });
+    }
+  }
+  if (data.length) {
+    await prisma.accountPermission.createMany({ data, skipDuplicates: true });
+    console.log(`[Vertinova API] Backfilled source permissions for ${data.length / sourcePermissionIds.length} account(s).`);
+  }
 };
 
 const authenticate = async (request) => {
@@ -2348,23 +2402,26 @@ const route = async (request, response) => {
   if (request.method === 'GET' && request.url === '/api/finance/sources') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     await syncSimpaskorAdminFeeBalance();
-    json(response, 200, { sources: await getSourcesFromDb() });
+    const allowed = getAllowedSourceIds(user);
+    json(response, 200, { sources: filterSources(await getSourcesFromDb(), allowed) });
     return;
   }
 
   if (request.method === 'POST' && request.url === '/api/finance/sync') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     await syncApiSources();
+    const allowed = getAllowedSourceIds(user);
     json(response, 200, {
-      sources: await getSourcesFromDb(),
-      transactions: await getTransactionsFromDb(),
+      sources: filterSources(await getSourcesFromDb(), allowed),
+      transactions: filterTransactions(await getTransactionsFromDb(), allowed),
     });
     return;
   }
 
   if (request.method === 'GET' && request.url === '/api/finance/transactions') {
     if (!requirePermission(user, response, 'finance.transactions')) return;
-    json(response, 200, { transactions: await getTransactionsFromDb() });
+    const allowed = getAllowedSourceIds(user);
+    json(response, 200, { transactions: filterTransactions(await getTransactionsFromDb(), allowed) });
     return;
   }
 
@@ -2372,24 +2429,28 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && currentUrl.pathname === '/api/finance/admin-fees') {
     if (!requirePermission(user, response, 'finance.transactions')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     json(response, 200, await listSimpaskorAdminFees(currentUrl.searchParams));
     return;
   }
 
   if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/platform-revenue') {
     if (!requirePermission(user, response, 'finance.transactions')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     json(response, 200, await listSimpaskorPlatformRevenue(currentUrl.searchParams));
     return;
   }
 
   if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/breakdown') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     json(response, 200, { sourceId: 'simpaskor', breakdown: await getSimpaskorBreakdown() });
     return;
   }
 
   if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-platform-revenue') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     const result = await syncSimpaskorPlatformRevenue();
     await syncSimpaskorAdminFeeBalance();
     json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
@@ -2398,6 +2459,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/summary') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     const cached = await readSimpaskorMetric('summary');
     json(response, 200, {
       sourceId: 'simpaskor',
@@ -2409,6 +2471,7 @@ const route = async (request, response) => {
 
   if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-summary') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     const result = await syncSimpaskorSummary();
     json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
     return;
@@ -2416,6 +2479,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && currentUrl.pathname === '/api/finance/simpaskor/revenue-share-balances') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     const cached = await readSimpaskorMetric('revenue_share_balances');
     json(response, 200, {
       sourceId: 'simpaskor',
@@ -2427,6 +2491,7 @@ const route = async (request, response) => {
 
   if (request.method === 'POST' && currentUrl.pathname === '/api/finance/simpaskor/sync-revenue-share-balances') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     const result = await syncSimpaskorRevenueShareBalances();
     json(response, result.ok ? 200 : 502, { sourceId: 'simpaskor', ...result });
     return;
@@ -2434,6 +2499,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && request.url === '/api/finance/simpaskor/balance') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'simpaskor')) return;
     json(response, 200, {
       source: await fetchBalance({
         id: 'simpaskor',
@@ -2448,6 +2514,7 @@ const route = async (request, response) => {
 
   if (request.method === 'GET' && request.url === '/api/finance/forbasi/balance') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
+    if (!requireSourceAccess(user, response, 'forbasi')) return;
     json(response, 200, {
       source: await fetchBalance({
         id: 'forbasi',
@@ -2463,6 +2530,7 @@ const route = async (request, response) => {
   if (request.method === 'GET' && /^\/api\/finance\/details\/(simpaskor|forbasi)(\?|$)/.test(request.url)) {
     if (!requirePermission(user, response, 'finance.transactions')) return;
     const sourceId = currentUrl.pathname.split('/')[4];
+    if (!requireSourceAccess(user, response, sourceId)) return;
 
     if (sourceId === 'simpaskor') {
       const [adminFees, platformRevenue, breakdown] = await Promise.all([
@@ -2528,10 +2596,13 @@ const route = async (request, response) => {
   if (request.method === 'GET' && request.url === '/api/finance/dashboard') {
     if (!requirePermission(user, response, 'finance.dashboard')) return;
     await syncSimpaskorAdminFeeBalance();
-    const [sources, transactions] = await Promise.all([
+    const [allSources, allTransactions] = await Promise.all([
       getSourcesFromDb(),
       getTransactionsFromDb(),
     ]);
+    const allowed = getAllowedSourceIds(user);
+    const sources = filterSources(allSources, allowed);
+    const transactions = filterTransactions(allTransactions, allowed);
     const totalIncome = sources.reduce((sum, s) => sum + s.amount, 0);
     const apiIncome = sources.filter((s) => s.category === 'api').reduce((sum, s) => sum + s.amount, 0);
     const revenueSharePercent = Number(user.revenueShare?.percentage ?? 0);
@@ -2567,6 +2638,7 @@ await ensureRevenueSources();
 await prisma.financeTransaction.deleteMany({ where: { externalId: { startsWith: 'sync-' } } });
 await syncSimpaskorAdminFeeBalance();
 await ensureSuperAdmin();
+await backfillSourcePermissions();
 await prisma.userSession.deleteMany({ where: { expiresAt: { lte: new Date() } } });
 
 createServer((request, response) => {

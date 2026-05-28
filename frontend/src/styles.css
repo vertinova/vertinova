@@ -901,6 +901,18 @@
     @apply grid grid-cols-1 gap-2;
   }
 
+  .permission-groups {
+    @apply flex flex-col gap-4;
+  }
+
+  .permission-group {
+    @apply flex flex-col gap-2;
+  }
+
+  .permission-group-title {
+    @apply text-xs font-black uppercase tracking-wide text-[#15803d];
+  }
+
   .permission-item,
   .toggle-row {
     @apply flex min-h-11 items-center gap-2 rounded-lg border border-line bg-[#f8faf9] px-3 text-sm font-bold text-ink;

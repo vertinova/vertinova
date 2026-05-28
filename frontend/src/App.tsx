@@ -2292,6 +2292,7 @@ function AccountsView({
   onUpdate: (accountId: number, payload: Record<string, unknown>) => Promise<void>;
 }) {
   const permissionCatalog = accessData?.permissionCatalog ?? [];
+  const defaultNewPermissions = ['finance.dashboard', 'source.simpaskor', 'source.forbasi', 'source.manual'];
   const [form, setForm] = useState({
     name: '',
     username: '',
@@ -2299,7 +2300,7 @@ function AccountsView({
     password: '',
     role: 'admin',
     revenueSharePercent: 0,
-    permissions: ['finance.dashboard'],
+    permissions: defaultNewPermissions,
   });
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -2320,7 +2321,7 @@ function AccountsView({
 
     try {
       await onSave(form);
-      setForm({ name: '', username: '', email: '', password: '', role: 'admin', revenueSharePercent: 0, permissions: ['finance.dashboard'] });
+      setForm({ name: '', username: '', email: '', password: '', role: 'admin', revenueSharePercent: 0, permissions: defaultNewPermissions });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Akun gagal dibuat.');
     } finally {
@@ -2382,6 +2383,10 @@ function AccountsView({
   );
 }
 
+const permissionGroupLabels: Record<string, string> = {
+  sources: 'Akses Sumber Pendapatan',
+};
+
 function PermissionChecklist({
   catalog,
   selected,
@@ -2391,14 +2396,35 @@ function PermissionChecklist({
   selected: string[];
   onToggle: (permission: string) => void;
 }) {
+  const sourcePerms = catalog.filter((p) => p.feature === 'sources');
+  const featurePerms = catalog.filter((p) => p.feature !== 'sources');
+
   return (
-    <div className="permission-grid">
-      {catalog.map((permission) => (
-        <label key={permission.id} className="permission-item">
-          <input type="checkbox" checked={selected.includes(permission.id)} onChange={() => onToggle(permission.id)} />
-          <span>{permission.label}</span>
-        </label>
-      ))}
+    <div className="permission-groups">
+      <div className="permission-group">
+        <span className="permission-group-title">Fitur</span>
+        <div className="permission-grid">
+          {featurePerms.map((permission) => (
+            <label key={permission.id} className="permission-item">
+              <input type="checkbox" checked={selected.includes(permission.id)} onChange={() => onToggle(permission.id)} />
+              <span>{permission.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      {sourcePerms.length ? (
+        <div className="permission-group">
+          <span className="permission-group-title">{permissionGroupLabels.sources}</span>
+          <div className="permission-grid">
+            {sourcePerms.map((permission) => (
+              <label key={permission.id} className="permission-item">
+                <input type="checkbox" checked={selected.includes(permission.id)} onChange={() => onToggle(permission.id)} />
+                <span>{permission.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
