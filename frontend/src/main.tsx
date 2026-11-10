@@ -3,15 +3,18 @@ import { createRoot } from 'react-dom/client';
 import Landing from './landing';
 import './styles.css';
 
-// Client proposal pages live on their own path and are only downloaded when visited.
-const Rempah = lazy(() => import('./rempah/RempahPage'));
-const path = window.location.pathname.replace(/\/+$/, '');
+// Extra pages (client demos/proposals) live on their own paths and are only downloaded when visited.
+const PAGES: Record<string, React.LazyExoticComponent<() => React.JSX.Element>> = {
+  '/rempah': lazy(() => import('./rempah/demo/RempahDemo')),
+  '/rempah/usulan': lazy(() => import('./rempah/RempahPage')),
+};
+const Page = PAGES[window.location.pathname.replace(/\/+$/, '')];
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {path === '/rempah' ? (
+    {Page ? (
       <Suspense fallback={null}>
-        <Rempah />
+        <Page />
       </Suspense>
     ) : (
       <Landing />

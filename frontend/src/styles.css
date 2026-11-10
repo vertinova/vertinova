@@ -10,6 +10,7 @@
   --color-paper: #f6f4ee;
   --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: Fraunces, Georgia, "Times New Roman", serif;
   --animate-marquee: marquee 32s linear infinite;
 
   @keyframes marquee {

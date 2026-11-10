@@ -141,8 +141,8 @@ export default function RempahPage() {
             <a className={`${btn.base} ${btn.solid}`} href={wa || mail} target={wa ? '_blank' : undefined} rel="noopener noreferrer">
               Ngobrol soal website Anda <ArrowRight size={18} />
             </a>
-            <a className={`${btn.base} ${btn.line}`} href="#isi">
-              Lihat usulan isi
+            <a className={`${btn.base} ${btn.line}`} href="/rempah">
+              Lihat demo websitenya
             </a>
           </div>
         </div>
