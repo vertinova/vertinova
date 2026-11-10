@@ -768,6 +768,42 @@ kbd {
 }
 
 @media (max-width: 560px) {
+  /* Intro must fit one phone screen: shorter copy, steps without sub-lines. */
+  .vx-intro h1 {
+    margin: 10px 0 6px;
+    font-size: 24px;
+  }
+
+  .vx-intro .vx-lead {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 10px;
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+
+  .vx-steps {
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .vx-steps li {
+    align-items: center;
+    padding: 9px 12px;
+  }
+
+  .vx-steps small {
+    display: none;
+  }
+
+  .vx-intro .vx-modal-foot {
+    margin-top: 12px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+  }
+
   .vx-modal-backdrop {
     padding: 12px;
   }
