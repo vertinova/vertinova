@@ -24,7 +24,7 @@ function StepTitle({ index, title, text }: { index: number; title: string; text:
       <div style={{ font: '700 26px "Plus Jakarta Sans", sans-serif', color: SAFFRON, letterSpacing: 2 }}>
         {String(index + 1).padStart(2, '0')} / 05
       </div>
-      <div style={{ font: '800 96px Fraunces, Georgia, serif', color: CREAM, lineHeight: 1, marginTop: 14, letterSpacing: -2 }}>{title}</div>
+      <div style={{ font: '800 100px "Bricolage Grotesque", sans-serif', color: CREAM, lineHeight: 1, marginTop: 14, letterSpacing: -4 }}>{title}</div>
       <div style={{ font: '500 30px "Plus Jakarta Sans", sans-serif', color: 'rgba(246,234,215,0.75)', lineHeight: 1.35, marginTop: 22 }}>{text}</div>
     </div>
   );

@@ -95,15 +95,15 @@ function Heap() {
     // A few spilled on the table.
     for (let i = 0; i < 26; i++) {
       const a = random() * Math.PI * 2;
-      const r = 1.9 + random() * 1.1;
+      const r = 1.8 + random() * 0.45;
       corns.push({ p: [Math.cos(a) * r, 0.055, Math.sin(a) * r], s: 0.9, c: random() < 0.3 ? '#d8ccb4' : '#2b2622' });
     }
     const sticks: Item[] = [
       { p: [-0.3, heapHeight(0.3) + 0.12, 0.2], r: [0.2, 0.5, Math.PI / 2 - 0.25] },
       { p: [0.25, heapHeight(0.25) + 0.16, -0.15], r: [-0.15, -0.7, Math.PI / 2 + 0.2] },
       { p: [0.05, heapHeight(0.1) + 0.2, 0.35], r: [0.1, 1.4, Math.PI / 2 - 0.1] },
-      { p: [2.3, 0.08, 0.9], r: [0, 0.3, Math.PI / 2] },
-      { p: [2.15, 0.08, 1.15], r: [0, 0.45, Math.PI / 2] },
+      { p: [1.85, 0.08, 0.75], r: [0, 0.3, Math.PI / 2] },
+      { p: [1.7, 0.08, 1.0], r: [0, 0.45, Math.PI / 2] },
     ];
     const cloves: Item[] = Array.from({ length: 14 }, () => {
       const r = random() * 1.1;
@@ -112,8 +112,8 @@ function Heap() {
     });
     const nuts: Item[] = [
       { p: [-0.75, heapHeight(0.8) + 0.08, -0.45], r: [0.3, 0.2, 0.5], s: [0.17, 0.21, 0.17] },
-      { p: [-1.95, 0.18, -1.2], r: [0.2, 0.4, 1.4], s: [0.17, 0.21, 0.17] },
-      { p: [-2.25, 0.18, -0.85], r: [1.2, 0.2, 0.3], s: [0.16, 0.2, 0.16] },
+      { p: [-1.75, 0.18, -0.95], r: [0.2, 0.4, 1.4], s: [0.17, 0.21, 0.17] },
+      { p: [-1.95, 0.18, -0.55], r: [1.2, 0.2, 0.3], s: [0.16, 0.2, 0.16] },
     ];
     return { corns, sticks, cloves, nuts };
   }, []);
@@ -159,7 +159,7 @@ function Heap() {
       <Instanced geometry={geo.nut} material={mat.nut} items={data.nuts} />
       <StarAnise position={[0.55, heapHeight(0.6) + 0.1, 0.45]} rotation={[0.25, 0.4, 0.1]} />
       <StarAnise position={[-0.4, heapHeight(0.5) + 0.12, 0.65]} rotation={[-0.2, 1.1, 0.15]} scale={0.9} />
-      <StarAnise position={[1.6, 0.06, -1.9]} rotation={[0, 0.6, 0]} />
+      <StarAnise position={[1.35, 0.06, -1.45]} rotation={[0, 0.6, 0]} />
     </>
   );
 }
@@ -193,15 +193,16 @@ export default function Hero3D() {
   }, []);
 
   return (
-    <div ref={wrap} className={`h-full w-full ${touch ? '' : 'cursor-grab active:cursor-grabbing'}`}>
-      <Canvas frameloop={visible ? 'always' : 'never'} dpr={[1, 2]} shadows camera={{ position: [0, 3.4, 5.6], fov: 36 }} gl={{ antialias: true, alpha: true }} onCreated={({ camera }) => camera.lookAt(0, 0.5, 0)}>
+    // Radial mask: soft edge instead of a hard cut where sparkles or the spill reach the canvas border.
+    <div ref={wrap} className={`h-full w-full [mask-image:radial-gradient(closest-side,#000_82%,transparent)] ${touch ? '' : 'cursor-grab active:cursor-grabbing'}`}>
+      <Canvas frameloop={visible ? 'always' : 'never'} dpr={[1, 2]} shadows camera={{ position: [0, 3.6, 6.5], fov: 36 }} gl={{ antialias: true, alpha: true }} onCreated={({ camera }) => camera.lookAt(0, 0.5, 0)}>
         <ambientLight intensity={0.55} color="#ffe6c4" />
         <directionalLight position={[3.5, 6, 3]} intensity={2.4} color="#ffd8a3" castShadow shadow-mapSize={[1024, 1024]} shadow-bias={-0.0004} />
         <pointLight position={[-3, 2.2, -2]} intensity={10} color="#ff8a3d" />
         <pointLight position={[2.5, 1.2, 3]} intensity={4} color="#ffd29a" />
         <Scene autoRotate={touch} />
         <ContactShadows position={[0, -0.01, 0]} opacity={0.5} scale={9} blur={2.4} far={3} color="#2a160a" />
-        <Sparkles count={36} scale={[5, 2.6, 5]} position={[0, 1.6, 0]} size={2.4} speed={0.25} color="#f5c27a" opacity={0.7} />
+        <Sparkles count={30} scale={[4, 2.4, 4]} position={[0, 1.6, 0]} size={2.4} speed={0.25} color="#f5c27a" opacity={0.7} />
         {!touch && <OrbitControls enablePan={false} enableZoom={false} autoRotate autoRotateSpeed={0.7} minPolarAngle={0.55} maxPolarAngle={1.2} target={[0, 0.5, 0]} />}
       </Canvas>
     </div>

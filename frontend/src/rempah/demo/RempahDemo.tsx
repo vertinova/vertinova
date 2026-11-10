@@ -57,10 +57,8 @@ export default function RempahDemo() {
         <div className={`${container} relative grid items-center gap-6 pt-10 pb-14 lg:min-h-[640px] lg:grid-cols-[1fr_1.05fr] lg:pt-6 lg:pb-10`}>
           <div className="order-2 lg:order-1">
             <p className="m-0 text-[13px] font-semibold tracking-[0.18em] text-[#e0a526] uppercase">{t.heroKicker}</p>
-            <h1 className="mt-4 mb-0 font-serif text-[clamp(40px,5.6vw,76px)] leading-[1.02] font-semibold tracking-[-0.025em]">
-              {t.heroTitle[0]}
-              <br />
-              <em className="font-medium text-[#e0a526]">{t.heroTitle[1]}</em> {t.heroTitle[2]}
+            <h1 className="mt-4 mb-0 font-display text-[clamp(42px,6vw,84px)] leading-[0.98] font-extrabold tracking-[-0.035em]">
+              {t.heroTitle[0]} <span className="text-[#e0a526]">{t.heroTitle[1]}</span> {t.heroTitle[2]}
             </h1>
             <p className="mt-6 mb-0 max-w-[520px] text-[17px] leading-relaxed text-[#f7efe2]/75">{t.heroText}</p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -72,7 +70,7 @@ export default function RempahDemo() {
               </a>
             </div>
           </div>
-          <div className="relative order-1 aspect-square w-full max-w-[620px] justify-self-center lg:order-2">
+          <div className="relative order-1 aspect-square w-full max-w-[680px] justify-self-center lg:order-2 lg:-mr-8">
             <Suspense fallback={<HeroFallback />}>
               <Hero3D />
             </Suspense>
@@ -80,10 +78,10 @@ export default function RempahDemo() {
           </div>
         </div>
         <div className={`${container} relative pb-10`}>
-          <dl className="m-0 grid grid-cols-2 border-t border-[#f7efe2]/15 sm:grid-cols-4">
+          <dl className="m-0 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {t.stats.map(([value, label]) => (
-              <div key={label} className="border-b border-[#f7efe2]/10 py-5 pr-4 sm:border-b-0">
-                <dt className="font-serif text-[clamp(28px,3.2vw,40px)] leading-none font-semibold text-[#e0a526]">{value}</dt>
+              <div key={label} className="rounded-2xl border border-[#f7efe2]/10 bg-[#f7efe2]/[0.04] p-5">
+                <dt className="font-display text-[clamp(28px,3.2vw,40px)] leading-none font-extrabold tracking-[-0.03em] text-[#e0a526]">{value}</dt>
                 <dd className="m-0 mt-2 text-sm text-[#f7efe2]/65">{label}</dd>
               </div>
             ))}
@@ -118,7 +116,7 @@ export default function RempahDemo() {
                 <SpiceArt kind={p.art} className="absolute inset-[14%] h-[72%] w-[72%] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3" />
               </span>
               <span className="flex flex-1 flex-col p-4 sm:p-5">
-                <span className="font-serif text-[clamp(18px,2vw,22px)] leading-tight font-semibold">{p.name[lang]}</span>
+                <span className="font-display text-[clamp(18px,2vw,22px)] leading-tight font-bold">{p.name[lang]}</span>
                 <span className="mt-0.5 text-[13px] text-[#2a1a10]/55 italic">{p.latin}</span>
                 <span className="mt-3 flex items-center gap-1.5 text-[13px] text-[#2a1a10]/70">
                   <MapPin size={14} className="shrink-0 text-[#9c4a24]" /> {p.origin}
@@ -138,8 +136,8 @@ export default function RempahDemo() {
           <ol className="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-6 lg:gap-3">
             {ORIGINS.map((o, i) => (
               <li key={o.region} className="relative">
-                <span className="relative z-10 grid size-11 place-items-center rounded-full border-2 border-[#9c4a24] bg-[#f7efe2] font-serif text-lg font-semibold text-[#9c4a24]">{i + 1}</span>
-                <h3 className="mt-3 mb-0 font-serif text-xl font-semibold">{o.region}</h3>
+                <span className="relative z-10 grid size-11 place-items-center rounded-full border-2 border-[#9c4a24] bg-[#f7efe2] font-display text-lg font-bold text-[#9c4a24]">{i + 1}</span>
+                <h3 className="mt-3 mb-0 font-display text-xl font-bold">{o.region}</h3>
                 <p className="mt-0.5 mb-3 text-[13px] text-[#2a1a10]/60">{o.island}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {o.ids.map((id) => {
@@ -167,7 +165,7 @@ export default function RempahDemo() {
         <ol className="mt-6 grid list-none gap-4 p-0 sm:grid-cols-5">
           {t.steps.map(([title, text], i) => (
             <li key={title} className="text-sm leading-snug text-[#2a1a10]/70">
-              <b className="block font-serif text-base text-[#2a1a10]">
+              <b className="block font-display text-base text-[#2a1a10]">
                 {String(i + 1).padStart(2, '0')} · {title}
               </b>
               {text}
@@ -187,7 +185,7 @@ export default function RempahDemo() {
                 <span className="grid size-11 place-items-center rounded-2xl bg-[#4f6b3a]/12 text-[#4f6b3a]">
                   <Icon size={22} />
                 </span>
-                <h3 className="mt-4 mb-1.5 font-serif text-xl font-semibold">{title}</h3>
+                <h3 className="mt-4 mb-1.5 font-display text-xl font-bold">{title}</h3>
                 <p className="m-0 text-[15px] leading-relaxed text-[#2a1a10]/70">{text}</p>
               </article>
             );
@@ -199,7 +197,7 @@ export default function RempahDemo() {
       <section id="penawaran" ref={inquiry} className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
         <div className="grid gap-8 overflow-hidden rounded-[28px] p-6 text-[#f7efe2] sm:p-10 lg:grid-cols-[1fr_1.15fr] lg:gap-14 lg:p-14" style={{ background: `radial-gradient(ellipse at 20% 0%, #5a3418, ${COCOA} 70%)` }}>
           <div>
-            <h2 className="m-0 font-serif text-[clamp(32px,4.4vw,52px)] leading-[1.04] font-semibold tracking-[-0.02em]">{t.inquiryTitle}</h2>
+            <h2 className="m-0 font-display text-[clamp(32px,4.4vw,52px)] leading-[1.04] font-extrabold tracking-[-0.035em]">{t.inquiryTitle}</h2>
             <p className="mt-4 mb-6 max-w-[440px] text-[17px] leading-relaxed text-[#f7efe2]/70">{t.inquiryText}</p>
             <div className="hidden gap-3 lg:grid">
               {[
@@ -243,7 +241,7 @@ function Header({ t, lang, setLang }: { t: (typeof T)[Lang]; lang: Lang; setLang
   return (
     <header className="sticky top-0 z-30 border-b border-[#f7efe2]/10 bg-[#1f140d] text-[#f7efe2]">
       <div className={`${container} flex h-16 items-center justify-between gap-3`}>
-        <a href="#" className="flex items-center gap-2.5 font-serif text-xl font-semibold tracking-tight text-[#f7efe2] no-underline">
+        <a href="#" className="flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-[#f7efe2] no-underline">
           <Logo className="size-8" />
           Arunika<span className="font-jakarta text-xs font-semibold tracking-[0.2em] text-[#e0a526] uppercase max-sm:hidden">Rempah</span>
         </a>
@@ -272,7 +270,7 @@ function Header({ t, lang, setLang }: { t: (typeof T)[Lang]; lang: Lang; setLang
 function SectionHead({ title, text }: { title: string; text?: string }) {
   return (
     <div className="mb-8 max-w-[720px] lg:mb-12">
-      <h2 className="m-0 font-serif text-[clamp(32px,4.4vw,54px)] leading-[1.04] font-semibold tracking-[-0.02em]">{title}</h2>
+      <h2 className="m-0 font-display text-[clamp(32px,4.4vw,54px)] leading-[1.04] font-extrabold tracking-[-0.035em]">{title}</h2>
       {text && <p className="mt-3 mb-0 text-[17px] leading-relaxed text-[#2a1a10]/70">{text}</p>}
     </div>
   );
@@ -315,7 +313,7 @@ function ProductModal({ product: p, t, lang, onClose, onQuote }: { product: Prod
         </div>
         <div className="p-6 sm:p-8">
           <p className="m-0 text-[13px] text-[#2a1a10]/55 italic">{p.latin}</p>
-          <h2 className="mt-1 mb-3 font-serif text-[clamp(28px,3.4vw,38px)] leading-tight font-semibold">{p.name[lang]}</h2>
+          <h2 className="mt-1 mb-3 font-display text-[clamp(28px,3.4vw,38px)] leading-tight font-bold">{p.name[lang]}</h2>
           <p className="mt-0 mb-5 text-[15px] leading-relaxed text-[#2a1a10]/75">{p.desc[lang]}</p>
           <dl className="m-0 grid text-[14px]">
             {p.specs.map((s) => (
