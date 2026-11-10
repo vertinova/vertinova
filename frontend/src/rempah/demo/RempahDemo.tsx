@@ -54,7 +54,7 @@ export default function RempahDemo() {
 
       {/* Hero */}
       <section className="relative overflow-hidden text-[#f7efe2]" style={{ background: `radial-gradient(ellipse at 75% 35%, #5a3418 0%, ${COCOA} 62%)` }}>
-        <div className={`${container} relative grid items-center gap-2 pt-2 pb-10 sm:gap-6 sm:pt-10 sm:pb-14 lg:min-h-[640px] lg:grid-cols-[1fr_1.05fr] lg:pt-6 lg:pb-10`}>
+        <div className={`${container} relative grid items-center gap-2 pt-2 pb-10 sm:gap-6 sm:pt-10 sm:pb-14 grid-cols-[minmax(0,1fr)] lg:min-h-[640px] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-6 lg:pb-10`}>
           <div className="order-2 lg:order-1">
             <p className="m-0 text-[13px] font-semibold tracking-[0.18em] text-[#e0a526] uppercase">{t.heroKicker}</p>
             <h1 className="mt-4 mb-0 font-display text-[clamp(42px,6vw,84px)] leading-[0.98] font-extrabold tracking-[-0.035em]">
@@ -70,7 +70,7 @@ export default function RempahDemo() {
               </a>
             </div>
           </div>
-          <div className="relative order-1 aspect-[4/3] w-full max-w-[680px] justify-self-center sm:aspect-square lg:order-2 lg:-mr-8">
+          <div className="relative order-1 aspect-[4/3] w-full max-w-[680px] min-w-0 overflow-hidden justify-self-center sm:aspect-square lg:order-2 lg:-mr-8">
             <Suspense fallback={<HeroFallback />}>
               <Hero3D />
             </Suspense>
@@ -430,13 +430,13 @@ function DemoBar({ t }: { t: (typeof T)[Lang] }) {
         <span className="flex min-w-0 items-center gap-2">
           <img src={COMPANY.logo} alt="" className="size-5 shrink-0 rounded-full bg-white object-contain" />
           <span className="truncate text-[#f7efe2]/75 max-sm:hidden">{t.demoBar}</span>
-          <span className="font-semibold text-[#f7efe2]/85 sm:hidden">{t.demoBarShort}</span>
+          <span className="truncate font-semibold text-[#f7efe2]/85 sm:hidden">{t.demoBarShort}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <a href="/rempah/usulan" className="rounded-full px-3 py-1.5 font-semibold text-[#f7efe2]/80 no-underline hover:text-[#f7efe2] max-sm:hidden">
             {t.demoProposal}
           </a>
-          <a href={mailtoLink('Website seperti demo Arunika Rempah')} className="rounded-full bg-[#f7efe2] px-3.5 py-1.5 font-bold text-[#1f140d] no-underline">
+          <a href={mailtoLink('Website seperti demo Arunika Rempah')} className="rounded-full bg-[#f7efe2] px-3.5 py-1.5 font-bold whitespace-nowrap text-[#1f140d] no-underline max-[360px]:px-3 max-[360px]:text-xs">
             {t.demoContact}
           </a>
         </span>
