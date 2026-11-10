@@ -5,6 +5,18 @@
   --color-muted: #66746d;
   --color-line: #d9e0dc;
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  /* Public landing page (src/landing) */
+  --color-paper: #f6f4ee;
+  --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --animate-marquee: marquee 32s linear infinite;
+
+  @keyframes marquee {
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 @layer base {
@@ -969,109 +981,6 @@
     @apply grid gap-1;
   }
 
-  .site-page {
-    @apply min-h-screen bg-[#f6f7f5] text-ink;
-  }
-
-  .site-hero {
-    @apply relative min-h-screen overflow-hidden text-white;
-  }
-
-  .site-hero > img {
-    @apply absolute inset-0 h-full w-full object-cover;
-  }
-
-  .site-overlay {
-    @apply absolute inset-0;
-    background: linear-gradient(110deg, rgba(13, 23, 19, 0.84), rgba(13, 23, 19, 0.35), rgba(13, 23, 19, 0.68));
-  }
-
-  .site-nav {
-    @apply relative z-[1] mx-auto flex max-w-7xl items-center justify-between px-5 py-5;
-  }
-
-  .site-nav nav {
-    @apply flex items-center gap-3;
-  }
-
-  .site-nav button,
-  .site-nav a {
-    @apply rounded-lg border-0 bg-transparent px-3 py-2 text-sm font-bold text-white/75 transition hover:bg-white/10 hover:text-white;
-  }
-
-  .site-nav .site-login {
-    @apply bg-white text-[#101a16] hover:bg-[#e5f7ea];
-  }
-
-  .site-hero-content {
-    @apply relative z-[1] mx-auto grid min-h-[calc(100vh-84px)] max-w-7xl content-center px-5 pb-20;
-  }
-
-  .site-pill {
-    @apply inline-flex w-max items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-black;
-  }
-
-  .site-hero h1 {
-    @apply mt-5 text-[clamp(4rem,12vw,9rem)] font-black leading-[.85];
-  }
-
-  .site-hero p {
-    @apply mt-5 max-w-2xl text-lg leading-8 text-white/72;
-  }
-
-  .site-actions {
-    @apply mt-8 flex flex-wrap gap-3;
-  }
-
-  .site-actions a,
-  .site-actions button {
-    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 font-black transition;
-  }
-
-  .site-actions a {
-    @apply bg-white text-[#101a16] hover:bg-[#e5f7ea];
-  }
-
-  .site-actions button {
-    @apply border border-white/20 bg-white/10 text-white hover:bg-white hover:text-[#101a16];
-  }
-
-  .site-section {
-    @apply mx-auto max-w-7xl px-5 py-20;
-  }
-
-  .section-heading h2 {
-    @apply mt-2 max-w-3xl text-[clamp(2.2rem,5vw,4.5rem)] font-black leading-none;
-  }
-
-  .capability-grid {
-    @apply mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4;
-  }
-
-  .capability-grid article {
-    @apply rounded-lg border border-line bg-white p-5 shadow-[0_18px_45px_rgba(42,55,48,.07)];
-  }
-
-  .capability-grid svg {
-    @apply text-[#2f7d55];
-  }
-
-  .capability-grid h3 {
-    @apply mt-4 text-lg font-black;
-  }
-
-  .capability-grid p {
-    @apply mt-2 leading-7 text-muted;
-  }
-
-  .site-footer {
-    @apply flex justify-between gap-4 bg-[#101a16] px-5 py-8 text-sm text-white/62;
-  }
-
-  .site-footer a {
-    @apply text-white;
-  }
-
   /* ── Dashboard redesign ── */
 
   .db-hero {
@@ -1340,8 +1249,7 @@
     @apply grid-cols-2;
   }
 
-  .topbar-actions,
-  .site-nav nav {
+  .topbar-actions {
     @apply w-full;
   }
 
@@ -1355,9 +1263,6 @@
     @apply flex-1;
   }
 
-  .site-nav {
-    @apply flex-col items-start;
-  }
 }
 
 @media (min-width: 621px) {

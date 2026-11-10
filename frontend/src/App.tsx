@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
   Area,
@@ -15,15 +15,11 @@ import {
   YAxis,
 } from 'recharts';
 import {
-  ArrowRight,
   BadgeCheck,
   Banknote,
   Bell,
   Building2,
   CheckCircle2,
-  Cloud,
-  Code2,
-  DatabaseZap,
   Download,
   Landmark,
   Layers3,
@@ -37,7 +33,6 @@ import {
   School,
   Search,
   ShieldCheck,
-  Sparkles,
   UserRound,
   WalletCards,
   X,
@@ -45,6 +40,8 @@ import {
 } from 'lucide-react';
 import loginBackground from '../bg-landing-page.jpg';
 import logo from '../logo-vertinova.png';
+
+const Landing = lazy(() => import('./landing'));
 
 type SourceId = 'simpaskor' | 'forbasi' | 'desa' | 'sekolah' | 'swasta';
 type ApiSourceId = Extract<SourceId, 'simpaskor' | 'forbasi'>;
@@ -805,7 +802,11 @@ function App() {
   const activeSubtitle = activeNav.description;
 
   if (!isAdminPath) {
-    return <LandingPage />;
+    return (
+      <Suspense fallback={null}>
+        <Landing />
+      </Suspense>
+    );
   }
 
   if (isBooting) {
@@ -2704,83 +2705,6 @@ function LoginView({ onLogin }: { onLogin: (username: string, password: string) 
           {isSubmitting ? 'Memeriksa...' : 'Masuk Dashboard'}
         </button>
       </motion.form>
-    </main>
-  );
-}
-
-function LandingPage() {
-  const capabilities = [
-    { title: 'Software Development', description: 'Aplikasi web, mobile, dashboard, dan sistem operasional.', icon: Code2 },
-    { title: 'Cloud & Infrastructure', description: 'Deployment, server hardening, monitoring, dan otomasi.', icon: Cloud },
-    { title: 'Data & AI Automation', description: 'Integrasi data, otomasi proses, dan AI assistant.', icon: DatabaseZap },
-    { title: 'API Integration', description: 'Koneksi antar platform, payment, webhook, dan layanan pihak ketiga.', icon: PlugZap },
-  ];
-
-  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-
-  return (
-    <main className="site-page">
-      <section className="site-hero">
-        <img src={loginBackground} alt="" />
-        <div className="site-overlay" />
-        <header className="site-nav">
-          <div className="brand light">
-            <img className="brand-logo" src={logo} alt="Vertinova" />
-            <div>
-              <strong>Vertinova</strong>
-              <span>Technology Partner</span>
-            </div>
-          </div>
-          <nav>
-            <button onClick={() => scrollTo('capabilities')}>Kapabilitas</button>
-            <a href="mailto:hello@vertinova.id">Kontak</a>
-            <a className="site-login" href="/admin">
-              Masuk
-            </a>
-          </nav>
-        </header>
-        <div className="site-hero-content">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="site-pill">
-              <Sparkles size={16} />
-              Digital product studio
-            </span>
-            <h1>Vertinova</h1>
-            <p>
-              Kami membangun aplikasi, integrasi API, otomasi, dan infrastruktur digital yang rapi, stabil,
-              dan siap dipakai tim operasional.
-            </p>
-            <div className="site-actions">
-              <a href="mailto:hello@vertinova.id?subject=Konsultasi%20Project%20Vertinova">
-                Konsultasi Project
-                <ArrowRight size={18} />
-              </a>
-              <button onClick={() => scrollTo('capabilities')}>Lihat Kapabilitas</button>
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      <section id="capabilities" className="site-section">
-        <div className="section-heading">
-          <p className="eyebrow">Kapabilitas</p>
-          <h2>Sistem digital yang dirancang untuk kerja nyata.</h2>
-        </div>
-        <div className="capability-grid">
-          {capabilities.map((capability) => (
-            <article key={capability.title}>
-              <capability.icon size={24} />
-              <h3>{capability.title}</h3>
-              <p>{capability.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <footer className="site-footer">
-        <span>© {new Date().getFullYear()} Vertinova</span>
-        <a href="mailto:hello@vertinova.id">hello@vertinova.id</a>
-      </footer>
     </main>
   );
 }
