@@ -48,9 +48,6 @@ export default function LandingLite({ onOpen3D }: { onOpen3D?: () => void }) {
                 <Gamepad2 size={16} /> <span className="max-sm:hidden">Mode 3D</span>
               </button>
             )}
-            <a href="/admin" className="ml-1.5 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper no-underline hover:bg-teal-800">
-              Masuk
-            </a>
           </nav>
         </div>
       </header>

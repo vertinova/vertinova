@@ -128,12 +128,6 @@
   border-color: var(--vx-accent);
 }
 
-.vx-tools .vx-login {
-  background: var(--vx-accent-strong);
-  border-color: transparent;
-  color: #042f2a;
-}
-
 :is(.vx-hud, .lite) :focus-visible {
   outline: 3px solid #facc15;
   outline-offset: 2px;
@@ -270,12 +264,16 @@
   pointer-events: auto;
   inset: 0;
   z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
+  display: flex;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
   background: radial-gradient(ellipse at center, rgba(4, 18, 14, 0.35), rgba(4, 18, 14, 0.65));
   backdrop-filter: blur(3px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vx-modal-backdrop > * {
+  margin: auto;
 }
 
 .vx-modal,
@@ -283,7 +281,8 @@
   --vx-modal-accent: var(--vx-accent);
   position: relative;
   width: min(960px, 100%);
-  max-height: min(860px, calc(100dvh - 48px));
+  max-height: min(860px, calc(100vh - 32px));
+  max-height: min(860px, calc(100dvh - 32px));
   display: flex;
   flex-direction: column;
   color: var(--vx-text);
@@ -633,11 +632,17 @@
 .vx-intro {
   width: min(680px, 100%);
   padding: 28px 30px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .vx-intro .vx-modal-foot {
+  /* Sticky so the start button stays visible while the card scrolls on short screens. */
+  position: sticky;
+  bottom: 0;
   margin: 20px -30px 0;
   padding: 18px 30px 24px;
+  background: #0a211b;
 }
 
 .vx-intro-brand {
@@ -964,5 +969,71 @@ kbd {
     min-width: 36px;
     height: 36px;
     padding: 0 8px;
+  }
+}
+
+/* Short screens (landscape phones, small laptops): tighter modals so everything fits. */
+@media (max-height: 720px) {
+  .vx-modal-head {
+    padding-top: 18px;
+    padding-bottom: 8px;
+  }
+
+  .vx-modal-head h2 {
+    font-size: clamp(20px, 2.6vw, 24px);
+  }
+
+  .vx-modal-body {
+    padding-bottom: 14px;
+    gap: 16px;
+  }
+
+  .vx-modal-foot {
+    padding-top: 12px;
+    padding-bottom: 14px;
+  }
+
+  .vx-gallery-main {
+    aspect-ratio: 16 / 8;
+  }
+
+  .vx-intro {
+    padding-top: 20px;
+  }
+
+  .vx-intro h1 {
+    margin: 10px 0 6px;
+    font-size: clamp(22px, 3.4vw, 30px);
+  }
+
+  .vx-intro .vx-lead {
+    font-size: 14.5px;
+    line-height: 1.55;
+    margin-bottom: 10px;
+  }
+
+  .vx-steps {
+    margin-bottom: 10px;
+  }
+
+  .vx-steps li {
+    padding: 9px 10px;
+  }
+
+  .vx-intro .vx-modal-foot {
+    margin-top: 14px;
+    padding-top: 12px;
+    padding-bottom: 14px;
+  }
+}
+
+/* Landscape phones: intro steps side by side again to save height. */
+@media (max-height: 500px) and (min-width: 560px) {
+  .vx-steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .vx-steps small {
+    display: none;
   }
 }

@@ -139,6 +139,12 @@ function LoadingScreen() {
 function Intro({ onLite }: { onLite: () => void }) {
   const phase = useGame((s) => s.phase);
   const touch = useIsTouch();
+  const start = useRef<HTMLButtonElement>(null);
+  // Focus the start button for keyboard users without scrolling it into view (autoFocus would
+  // scroll the card to the bottom on short screens and hide the heading).
+  useEffect(() => {
+    if (phase === 'intro') start.current?.focus({ preventScroll: true });
+  }, [phase]);
   return (
     <AnimatePresence>
       {phase === 'intro' && (
@@ -208,7 +214,7 @@ function Intro({ onLite }: { onLite: () => void }) {
               <button className="vx-btn ghost" onClick={onLite}>
                 <LayoutList size={18} /> Lihat versi ringkas
               </button>
-              <button className="vx-btn primary" onClick={() => store.set({ phase: 'driving' })} autoFocus>
+              <button ref={start} className="vx-btn primary" onClick={() => store.set({ phase: 'driving' })}>
                 Mulai Jelajah <ArrowRight size={18} />
               </button>
             </footer>
@@ -349,7 +355,7 @@ function StationPanel() {
   const station = STATIONS.find((s) => s.id === active);
   const nextProject = PROJECT_STATIONS.find((s) => !visited.includes(s.id));
   useEffect(() => {
-    if (open) ref.current?.focus();
+    if (open) ref.current?.focus({ preventScroll: true });
   }, [open, active]);
   const content = station ? (station.kind === 'project' ? projectContent(station.id) : station.kind === 'contact' ? contactContent() : aboutContent()) : null;
   const nextLabel = nextProject ? `Lanjut ke ${nextProject.label.split('·')[0].trim()}` : station?.kind === 'contact' ? 'Lanjut menjelajah' : 'Lanjut ke Pos Kontak';
@@ -708,9 +714,6 @@ export function Hud({ onLite }: { onLite: () => void }) {
           <button onClick={onLite} className="vx-text-btn" aria-label="Lihat versi ringkas tanpa 3D">
             <LayoutList size={18} /> <span className="vx-hide-sm">Versi ringkas</span>
           </button>
-          <a className="vx-text-btn vx-login" href="/admin">
-            Masuk
-          </a>
         </div>
       </header>
 

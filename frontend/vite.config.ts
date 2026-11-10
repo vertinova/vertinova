@@ -4,16 +4,10 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: {
-    proxy: {
-      '/api': 'http://localhost:8787',
-    },
-  },
   build: {
     rollupOptions: {
       output: {
         manualChunks: {
-          charts: ['recharts'],
           motion: ['framer-motion'],
           icons: ['lucide-react'],
         },
