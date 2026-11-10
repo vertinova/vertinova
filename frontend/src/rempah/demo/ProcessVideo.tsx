@@ -1,5 +1,5 @@
 import { Player, type PlayerRef } from '@remotion/player';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AbsoluteFill, Easing, interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from 'remotion';
 import { SpiceArt } from './SpiceArt';
 
@@ -7,8 +7,12 @@ import { SpiceArt } from './SpiceArt';
 
 const FPS = 30;
 const STEP = 66; // frames per step
-const W = 1280;
-const H = 720;
+const WIDE = { w: 1280, h: 720 };
+const PORTRAIT = { w: 720, h: 900 };
+const usePortrait = () => {
+  const { width, height } = useVideoConfig();
+  return height > width;
+};
 const CREAM = '#f6ead7';
 const SAFFRON = '#e0a526';
 
@@ -20,7 +24,7 @@ function StepTitle({ index, title, text }: { index: number; title: string; text:
   const enter = spring({ frame, fps, config: { damping: 18, stiffness: 120 } });
   const exit = interpolate(frame, [STEP - 10, STEP], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   return (
-    <div style={{ position: 'absolute', left: 96, top: 120, width: 470, opacity: enter * (1 - exit), transform: `translateY(${(1 - enter) * 40 - exit * 20}px)` }}>
+    <div style={{ position: 'absolute', ...(usePortrait() ? { left: 64, top: 70, width: 592 } : { left: 96, top: 120, width: 470 }), opacity: enter * (1 - exit), transform: `translateY(${(1 - enter) * 40 - exit * 20}px)` }}>
       <div style={{ font: '700 26px "Plus Jakarta Sans", sans-serif', color: SAFFRON, letterSpacing: 2 }}>
         {String(index + 1).padStart(2, '0')} / 05
       </div>
@@ -36,7 +40,8 @@ function Scene({ index, world }: { index: number; world: string }) {
   const { fps } = useVideoConfig();
   const pop = (delay = 0) => spring({ frame: frame - delay, fps, config: { damping: 12, stiffness: 140 } });
   const fade = interpolate(frame, [0, 8, STEP - 10, STEP], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  const box: React.CSSProperties = { position: 'absolute', right: 90, top: 90, width: 560, height: 470, opacity: fade };
+  const placement = usePortrait() ? { left: 80, top: 330 } : { right: 90, top: 90 };
+  const box: React.CSSProperties = { position: 'absolute', ...placement, width: 560, height: 470, opacity: fade };
 
   if (index === 0) {
     // Harvest: three stems grow, buds pop open.
@@ -142,7 +147,7 @@ function Track({ steps }: Pick<Props, 'steps'>) {
   const active = Math.min(4, Math.floor(frame / STEP));
   const progress = (frame % STEP) / STEP;
   return (
-    <div style={{ position: 'absolute', left: 96, right: 96, bottom: 70, display: 'flex', gap: 18 }}>
+    <div style={{ position: 'absolute', ...(usePortrait() ? { left: 48, right: 48, bottom: 44 } : { left: 96, right: 96, bottom: 70 }), display: 'flex', gap: 14 }}>
       {steps.map(([title], i) => (
         <div key={title} style={{ flex: 1 }}>
           <div style={{ height: 6, borderRadius: 6, background: 'rgba(246,234,215,0.18)', overflow: 'hidden' }}>
@@ -171,6 +176,14 @@ function ProcessComposition({ steps, world }: Props) {
 
 /** Responsive player that only plays while on screen. */
 export default function ProcessVideo({ steps, world }: Props) {
+  const [portrait, setPortrait] = useState(() => window.matchMedia('(max-width: 640px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const update = () => setPortrait(mq.matches);
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  const size = portrait ? PORTRAIT : WIDE;
   const player = useRef<PlayerRef>(null);
   const wrap = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -188,13 +201,13 @@ export default function ProcessVideo({ steps, world }: Props) {
         inputProps={{ steps, world }}
         durationInFrames={STEP * steps.length}
         fps={FPS}
-        compositionWidth={W}
-        compositionHeight={H}
+        compositionWidth={size.w}
+        compositionHeight={size.h}
         loop
         autoPlay
         controls={false}
         clickToPlay={false}
-        style={{ width: '100%', aspectRatio: `${W} / ${H}` }}
+        style={{ width: '100%', aspectRatio: `${size.w} / ${size.h}` }}
       />
     </div>
   );

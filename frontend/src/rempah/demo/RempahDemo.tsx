@@ -54,7 +54,7 @@ export default function RempahDemo() {
 
       {/* Hero */}
       <section className="relative overflow-hidden text-[#f7efe2]" style={{ background: `radial-gradient(ellipse at 75% 35%, #5a3418 0%, ${COCOA} 62%)` }}>
-        <div className={`${container} relative grid items-center gap-6 pt-10 pb-14 lg:min-h-[640px] lg:grid-cols-[1fr_1.05fr] lg:pt-6 lg:pb-10`}>
+        <div className={`${container} relative grid items-center gap-2 pt-2 pb-10 sm:gap-6 sm:pt-10 sm:pb-14 lg:min-h-[640px] lg:grid-cols-[1fr_1.05fr] lg:pt-6 lg:pb-10`}>
           <div className="order-2 lg:order-1">
             <p className="m-0 text-[13px] font-semibold tracking-[0.18em] text-[#e0a526] uppercase">{t.heroKicker}</p>
             <h1 className="mt-4 mb-0 font-display text-[clamp(42px,6vw,84px)] leading-[0.98] font-extrabold tracking-[-0.035em]">
@@ -62,15 +62,15 @@ export default function RempahDemo() {
             </h1>
             <p className="mt-6 mb-0 max-w-[520px] text-[17px] leading-relaxed text-[#f7efe2]/75">{t.heroText}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href="#penawaran" className="inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#e0a526] px-6 text-[15px] font-bold text-[#1f140d] no-underline transition hover:bg-[#f0bd4a] max-sm:flex-1 max-sm:justify-center">
+              <a href="#penawaran" className="inline-flex min-h-[52px] items-center gap-2 rounded-full bg-[#e0a526] px-6 text-[15px] font-bold text-[#1f140d] no-underline transition hover:bg-[#f0bd4a] whitespace-nowrap max-sm:w-full max-sm:justify-center">
                 {t.cta} <ArrowRight size={18} />
               </a>
-              <a href="#produk" className="inline-flex min-h-[52px] items-center rounded-full border-[1.5px] border-[#f7efe2]/35 px-6 text-[15px] font-bold text-[#f7efe2] no-underline transition hover:border-[#f7efe2] max-sm:flex-1 max-sm:justify-center">
+              <a href="#produk" className="inline-flex min-h-[52px] items-center rounded-full border-[1.5px] border-[#f7efe2]/35 px-6 text-[15px] font-bold text-[#f7efe2] no-underline transition hover:border-[#f7efe2] whitespace-nowrap max-sm:w-full max-sm:justify-center">
                 {t.heroSecondary}
               </a>
             </div>
           </div>
-          <div className="relative order-1 aspect-square w-full max-w-[680px] justify-self-center lg:order-2 lg:-mr-8">
+          <div className="relative order-1 aspect-[4/3] w-full max-w-[680px] justify-self-center sm:aspect-square lg:order-2 lg:-mr-8">
             <Suspense fallback={<HeroFallback />}>
               <Hero3D />
             </Suspense>
@@ -90,7 +90,7 @@ export default function RempahDemo() {
       </section>
 
       {/* Catalogue */}
-      <section id="produk" className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
+      <section id="produk" className={`${container} scroll-mt-20 pt-14 sm:pt-20 lg:pt-28`}>
         <SectionHead title={t.productsTitle} text={t.productsText} />
         <div className="-mx-4 mb-8 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0" role="tablist" aria-label={t.productsTitle}>
           {CATEGORIES.map((c) => (
@@ -112,12 +112,12 @@ export default function RempahDemo() {
               onClick={() => setOpen(p)}
               className="group flex flex-col overflow-hidden rounded-[22px] border border-[#2a1a10]/10 bg-[#fffaf1] p-0 text-left transition hover:-translate-y-1 hover:shadow-[0_24px_40px_-26px_rgba(42,26,16,0.55)]"
             >
-              <span className="relative block aspect-[4/3.4] overflow-hidden" style={{ background: `radial-gradient(circle at 50% 60%, ${p.color}33, ${p.color}14 70%)` }}>
+              <span className="relative block aspect-[4/3] overflow-hidden sm:aspect-[4/3.4]" style={{ background: `radial-gradient(circle at 50% 60%, ${p.color}33, ${p.color}14 70%)` }}>
                 <SpiceArt kind={p.art} className="absolute inset-[14%] h-[72%] w-[72%] transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3" />
               </span>
-              <span className="flex flex-1 flex-col p-4 sm:p-5">
+              <span className="flex flex-1 flex-col p-3.5 sm:p-5">
                 <span className="font-display text-[clamp(18px,2vw,22px)] leading-tight font-bold">{p.name[lang]}</span>
-                <span className="mt-0.5 text-[13px] text-[#2a1a10]/55 italic">{p.latin}</span>
+                <span className="mt-0.5 truncate text-[12px] text-[#2a1a10]/55 italic sm:text-[13px]">{p.latin}</span>
                 <span className="mt-3 flex items-center gap-1.5 text-[13px] text-[#2a1a10]/70">
                   <MapPin size={14} className="shrink-0 text-[#9c4a24]" /> {p.origin}
                 </span>
@@ -129,16 +129,16 @@ export default function RempahDemo() {
       </section>
 
       {/* Origins */}
-      <section id="asal" className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
+      <section id="asal" className={`${container} scroll-mt-20 pt-14 sm:pt-20 lg:pt-28`}>
         <SectionHead title={t.originTitle} text={t.originText} />
         <div className="relative">
           <div className="absolute top-[22px] right-0 left-0 hidden border-t-2 border-dashed border-[#9c4a24]/30 lg:block" aria-hidden="true" />
           <ol className="m-0 grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-6 lg:gap-3">
             {ORIGINS.map((o, i) => (
-              <li key={o.region} className="relative">
-                <span className="relative z-10 grid size-11 place-items-center rounded-full border-2 border-[#9c4a24] bg-[#f7efe2] font-display text-lg font-bold text-[#9c4a24]">{i + 1}</span>
-                <h3 className="mt-3 mb-0 font-display text-xl font-bold">{o.region}</h3>
-                <p className="mt-0.5 mb-3 text-[13px] text-[#2a1a10]/60">{o.island}</p>
+              <li key={o.region} className="relative grid grid-cols-[auto_1fr] gap-x-4 border-b border-[#2a1a10]/10 pb-4 sm:border-0 sm:pb-0 lg:block">
+                <span className="relative z-10 row-span-3 grid size-10 place-items-center rounded-full border-2 lg:size-11 border-[#9c4a24] bg-[#f7efe2] font-display text-lg font-bold text-[#9c4a24]">{i + 1}</span>
+                <h3 className="mt-1 mb-0 font-display text-xl font-bold lg:mt-3">{o.region}</h3>
+                <p className="mt-0.5 mb-2 text-[13px] text-[#2a1a10]/60 lg:mb-3">{o.island}</p>
                 <div className="flex flex-wrap gap-1.5">
                   {o.ids.map((id) => {
                     const p = PRODUCTS.find((x) => x.id === id)!;
@@ -157,12 +157,12 @@ export default function RempahDemo() {
       </section>
 
       {/* Process (Remotion) */}
-      <section id="proses" className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
+      <section id="proses" className={`${container} scroll-mt-20 pt-14 sm:pt-20 lg:pt-28`}>
         <SectionHead title={t.processTitle} text={t.processText} />
         <Suspense fallback={<div className="aspect-video w-full rounded-[22px] bg-[#1f140d]" />}>
           <ProcessVideo steps={t.steps} world={lang === 'id' ? 'Dunia' : 'World'} />
         </Suspense>
-        <ol className="mt-6 grid list-none gap-4 p-0 sm:grid-cols-5">
+        <ol className="mt-6 grid list-none gap-4 p-0 max-sm:sr-only sm:grid-cols-5">
           {t.steps.map(([title, text], i) => (
             <li key={title} className="text-sm leading-snug text-[#2a1a10]/70">
               <b className="block font-display text-base text-[#2a1a10]">
@@ -175,18 +175,20 @@ export default function RempahDemo() {
       </section>
 
       {/* Quality */}
-      <section id="kualitas" className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
+      <section id="kualitas" className={`${container} scroll-mt-20 pt-14 sm:pt-20 lg:pt-28`}>
         <SectionHead title={t.qualityTitle} />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {t.quality.map(([title, text], i) => {
             const Icon = QUALITY_ICONS[i];
             return (
-              <article key={title} className="rounded-[22px] border border-[#2a1a10]/10 bg-[#fffaf1] p-6">
-                <span className="grid size-11 place-items-center rounded-2xl bg-[#4f6b3a]/12 text-[#4f6b3a]">
+              <article key={title} className="flex gap-4 rounded-[22px] border border-[#2a1a10]/10 bg-[#fffaf1] p-5 sm:block sm:p-6">
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#4f6b3a]/12 text-[#4f6b3a]">
                   <Icon size={22} />
                 </span>
-                <h3 className="mt-4 mb-1.5 font-display text-xl font-bold">{title}</h3>
+                <div>
+                  <h3 className="mt-0 mb-1 font-display text-lg font-bold sm:mt-4 sm:mb-1.5 sm:text-xl">{title}</h3>
                 <p className="m-0 text-[15px] leading-relaxed text-[#2a1a10]/70">{text}</p>
+                </div>
               </article>
             );
           })}
@@ -194,8 +196,8 @@ export default function RempahDemo() {
       </section>
 
       {/* Inquiry */}
-      <section id="penawaran" ref={inquiry} className={`${container} scroll-mt-20 pt-20 lg:pt-28`}>
-        <div className="grid gap-8 overflow-hidden rounded-[28px] p-6 text-[#f7efe2] sm:p-10 lg:grid-cols-[1fr_1.15fr] lg:gap-14 lg:p-14" style={{ background: `radial-gradient(ellipse at 20% 0%, #5a3418, ${COCOA} 70%)` }}>
+      <section id="penawaran" ref={inquiry} className={`${container} scroll-mt-20 pt-14 sm:pt-20 lg:pt-28`}>
+        <div className="grid gap-6 overflow-hidden rounded-[24px] p-5 text-[#f7efe2] sm:gap-8 sm:rounded-[28px] sm:p-10 lg:grid-cols-[1fr_1.15fr] lg:gap-14 lg:p-14" style={{ background: `radial-gradient(ellipse at 20% 0%, #5a3418, ${COCOA} 70%)` }}>
           <div>
             <h2 className="m-0 font-display text-[clamp(32px,4.4vw,52px)] leading-[1.04] font-extrabold tracking-[-0.035em]">{t.inquiryTitle}</h2>
             <p className="mt-4 mb-6 max-w-[440px] text-[17px] leading-relaxed text-[#f7efe2]/70">{t.inquiryText}</p>
@@ -218,7 +220,7 @@ export default function RempahDemo() {
         </div>
       </section>
 
-      <footer className={`${container} mt-16 flex flex-wrap items-center justify-between gap-3 border-t border-[#2a1a10]/10 py-8 text-sm text-[#2a1a10]/60`}>
+      <footer className={`${container} mt-12 flex flex-wrap items-center justify-between gap-3 border-t border-[#2a1a10]/10 py-8 text-[13px] sm:mt-16 sm:text-sm text-[#2a1a10]/60`}>
         <span className="flex items-center gap-2">
           <Logo className="size-6" /> Arunika Rempah · {t.footer}
         </span>
@@ -269,8 +271,8 @@ function Header({ t, lang, setLang }: { t: (typeof T)[Lang]; lang: Lang; setLang
 
 function SectionHead({ title, text }: { title: string; text?: string }) {
   return (
-    <div className="mb-8 max-w-[720px] lg:mb-12">
-      <h2 className="m-0 font-display text-[clamp(32px,4.4vw,54px)] leading-[1.04] font-extrabold tracking-[-0.035em]">{title}</h2>
+    <div className="mb-6 max-w-[720px] sm:mb-8 lg:mb-12">
+      <h2 className="m-0 font-display text-[clamp(30px,4.4vw,54px)] leading-[1.04] font-extrabold tracking-[-0.035em]">{title}</h2>
       {text && <p className="mt-3 mb-0 text-[17px] leading-relaxed text-[#2a1a10]/70">{text}</p>}
     </div>
   );
@@ -427,7 +429,8 @@ function DemoBar({ t }: { t: (typeof T)[Lang] }) {
       <div className={`${container} flex min-h-12 items-center justify-between gap-3 py-2 text-[13px]`}>
         <span className="flex min-w-0 items-center gap-2">
           <img src={COMPANY.logo} alt="" className="size-5 shrink-0 rounded-full bg-white object-contain" />
-          <span className="truncate text-[#f7efe2]/75">{t.demoBar}</span>
+          <span className="truncate text-[#f7efe2]/75 max-sm:hidden">{t.demoBar}</span>
+          <span className="font-semibold text-[#f7efe2]/85 sm:hidden">{t.demoBarShort}</span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           <a href="/rempah/usulan" className="rounded-full px-3 py-1.5 font-semibold text-[#f7efe2]/80 no-underline hover:text-[#f7efe2] max-sm:hidden">
