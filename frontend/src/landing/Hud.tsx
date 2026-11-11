@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ContactForm } from './ContactForm';
-import { COMPANY, PROJECTS, mailtoLink, projectById, whatsappLink } from './projects';
+import { COMPANY, PROJECTS, RATES, RATE_NOTES, mailtoLink, projectById, rateLink, whatsappLink } from './projects';
 import { car, commands, input, leaveStation, store, useGame, type Quality } from './store';
 import { ROUTE_COUNT, STATIONS, routeX, routeZ, stationLayout } from './layout';
 
@@ -326,6 +326,29 @@ function contactContent(): PanelContent {
     title: 'Mari wujudkan sistem digital Anda.',
     color: '#38bdf8',
     body: (
+      <>
+        <div className="vx-rates">
+          {RATES.map((r) => (
+            <a key={r.name} className={r.featured ? 'featured' : undefined} href={rateLink(r.name)} target={COMPANY.whatsapp ? '_blank' : undefined} rel="noopener noreferrer">
+              <strong>{r.name}</strong>
+              <small>mulai</small>
+              <b>{r.price}</b>
+              <span>
+                {r.for} Pengerjaan {r.time}.
+              </span>
+              <ul>
+                {r.items.map((it) => (
+                  <li key={it}>{it}</li>
+                ))}
+              </ul>
+            </a>
+          ))}
+        </div>
+        <ul className="vx-rate-notes">
+          {RATE_NOTES.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
       <div className="vx-contact">
         <div>
           <p className="vx-lead">Ceritakan kebutuhan instansi atau organisasi Anda — kami bantu dari konsultasi, desain, pengembangan, hingga pendampingan setelah rilis.</p>
@@ -342,6 +365,7 @@ function contactContent(): PanelContent {
         </div>
         <ContactForm />
       </div>
+      </>
     ),
   };
 }

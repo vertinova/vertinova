@@ -176,3 +176,38 @@ export const mailtoLink = (subject: string, body = '') =>
 
 export const whatsappLink = (text: string) =>
   COMPANY.whatsapp ? `https://wa.me/${COMPANY.whatsapp}?text=${encodeURIComponent(text)}` : '';
+
+// Prices are starting points for a small-scope build; the written quote fixes the final number.
+export const RATES = [
+  {
+    name: 'Website Profil',
+    price: 'Rp 3,5 juta',
+    for: 'UMKM, komunitas, dan usaha yang baru mulai online.',
+    time: '± 2 minggu',
+    items: ['Hingga 5 halaman, rapi di HP', 'Domain & hosting tahun pertama', 'Tombol WhatsApp & Google Maps', 'SEO dasar agar mudah dicari', '2 kali revisi desain'],
+  },
+  {
+    name: 'Website Bisnis',
+    price: 'Rp 8,5 juta',
+    for: 'Usaha yang ingin menerima pesanan online.',
+    time: '± 3–4 minggu',
+    featured: true,
+    items: ['Semua di Website Profil', 'Katalog/menu yang bisa Anda ubah sendiri', 'Pemesanan via WhatsApp atau form', 'Dashboard admin sederhana', 'Pelatihan untuk tim Anda'],
+  },
+  {
+    name: 'Sistem Informasi',
+    price: 'Rp 25 juta',
+    for: 'Instansi & organisasi dengan alur kerja sendiri.',
+    time: '± 6–12 minggu',
+    items: ['Analisis kebutuhan bersama tim Anda', 'Hak akses per peran', 'Laporan & ekspor Excel/PDF', 'Integrasi API atau pembayaran bila perlu', 'Garansi perbaikan 3 bulan'],
+  },
+];
+
+export const RATE_NOTES = [
+  'Pendampingan setelah rilis (server, backup, perbaikan, perubahan kecil) mulai Rp 750 ribu/bulan, boleh berhenti kapan saja.',
+  'Bayar bertahap: 50% di awal, 50% saat serah terima. Sistem informasi bisa 3 termin.',
+  'Harga final tertulis di penawaran sebelum kerja dimulai, tanpa biaya tersembunyi. Pengadaan instansi menyesuaikan PPN.',
+];
+
+export const rateLink = (name: string) =>
+  whatsappLink(`Halo Vertinova, saya tertarik paket ${name}.`) || mailtoLink(`Tanya paket ${name}`);

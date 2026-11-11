@@ -1,7 +1,7 @@
-import { ArrowRight, ArrowUpRight, Gamepad2, Mail, MessageCircle } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Check, Gamepad2, Mail, MessageCircle } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { ContactForm } from './ContactForm';
-import { COMPANY, PROJECTS, whatsappLink, type Project } from './projects';
+import { COMPANY, PROJECTS, RATES, RATE_NOTES, rateLink, whatsappLink, type Project } from './projects';
 
 const hostOf = (url?: string) => (url ? new URL(url).host : 'segera hadir');
 // Back-to-front order of the screenshot stack in the hero.
@@ -37,6 +37,7 @@ export default function LandingLite({ onOpen3D }: { onOpen3D?: () => void }) {
             {[
               ['#karya', 'Karya'],
               ['#cara-kerja', 'Cara kerja'],
+              ['#harga', 'Harga'],
               ['#kontak', 'Kontak'],
             ].map(([href, label]) => (
               <a key={href} href={href} className="rounded-full px-3 py-2 text-sm font-semibold text-ink no-underline hover:bg-ink/5 max-sm:hidden">
@@ -135,11 +136,49 @@ export default function LandingLite({ onOpen3D }: { onOpen3D?: () => void }) {
         </ul>
       </section>
 
+      {/* Rate card */}
+      <section id="harga" className={`${container} scroll-mt-20 pt-20 lg:pt-32`}>
+        <SectionHead index="03 / Harga" title="Harga yang jelas sejak awal." sub="Harga mulai dari, untuk cakupan standar. Angka pastinya kami tulis di penawaran setelah mendengar kebutuhan Anda." />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {RATES.map((r) => (
+            <article
+              key={r.name}
+              className={`relative flex flex-col rounded-[22px] border p-6 sm:p-7 ${r.featured ? 'border-ink bg-ink text-paper' : 'border-stone-300 bg-white'}`}
+            >
+              {r.featured && <span className="absolute -top-3 left-6 rounded-full bg-teal-300 px-3 py-1 text-xs font-bold text-ink">Paling diminati</span>}
+              <h3 className="m-0 font-display text-[22px] font-bold tracking-tight">{r.name}</h3>
+              <p className={`mt-1.5 mb-5 text-[15px] leading-snug ${r.featured ? 'text-stone-300' : 'text-muted'}`}>{r.for}</p>
+              <p className="m-0 text-[13px] font-semibold">mulai</p>
+              <p className="m-0 font-display text-[clamp(32px,3.4vw,40px)] leading-none font-extrabold tracking-[-0.03em]">{r.price}</p>
+              <p className={`mt-2 mb-6 text-sm ${r.featured ? 'text-stone-300' : 'text-muted'}`}>Pengerjaan {r.time}</p>
+              <ul className={`m-0 mb-7 grid list-none gap-2.5 border-t p-0 pt-5 ${r.featured ? 'border-paper/20' : 'border-stone-300'}`}>
+                {r.items.map((it) => (
+                  <li key={it} className="flex gap-2.5 text-[15px] leading-snug">
+                    <Check size={18} aria-hidden="true" className={`mt-px shrink-0 ${r.featured ? 'text-teal-300' : 'text-teal-700'}`} />
+                    {it}
+                  </li>
+                ))}
+              </ul>
+              <a className={`${btn.base} ${r.featured ? btn.light : btn.line} mt-auto w-full`} href={rateLink(r.name)} target={COMPANY.whatsapp ? '_blank' : undefined} rel="noopener noreferrer">
+                Tanya paket ini <ArrowRight size={18} />
+              </a>
+            </article>
+          ))}
+        </div>
+        <ul className="mt-8 grid list-none gap-3 p-0 text-[15px] leading-relaxed text-muted lg:grid-cols-3 lg:gap-6">
+          {RATE_NOTES.map((n) => (
+            <li key={n} className="border-t border-stone-300 pt-3">
+              {n}
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {/* Contact */}
       <div className={`${container} pt-20 lg:pt-32`}>
         <section id="kontak" className="grid scroll-mt-20 items-start gap-8 rounded-[28px] bg-ink p-7 text-paper sm:p-12 lg:grid-cols-[1.1fr_1fr] lg:gap-16 lg:p-16">
           <div>
-            <span className="text-[13px] font-semibold tracking-[0.08em] text-teal-300 uppercase">03 / Kontak</span>
+            <span className="text-[13px] font-semibold tracking-[0.08em] text-teal-300 uppercase">04 / Kontak</span>
             <h2 className="mt-3 mb-4 font-display text-[clamp(32px,4.6vw,56px)] leading-[1.02] font-extrabold tracking-[-0.035em]">Ada proses yang bikin pusing? Ceritakan saja.</h2>
             <p className="mb-6 text-[17px] leading-relaxed text-stone-300">Kami balas dengan pertanyaan yang jujur dan perkiraan yang masuk akal — tanpa kewajiban apa pun.</p>
             <div className="flex flex-wrap gap-2.5">
