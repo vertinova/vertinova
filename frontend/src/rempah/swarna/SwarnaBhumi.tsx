@@ -12,7 +12,7 @@ const PHONE = '+62 816-666-997';
 const NAME = 'PT Swarnabhumi Global Nusantara';
 const waLink = (text: string) => `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(text)}`;
 
-const IMG = '/rempah';
+const IMG = '/swarnabhumi'; // must not share a name with a page route: nginx would serve the folder (403) instead of the SPA
 const wrap = 'mx-auto w-full max-w-[1200px] px-4 sm:px-6';
 const serif = "font-['Fraunces',ui-serif,Georgia,serif]";
 // Logo colours: brown earth, leaf green, saffron orange.
