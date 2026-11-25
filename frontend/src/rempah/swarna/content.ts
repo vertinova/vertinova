@@ -426,4 +426,4 @@ export const PRODUCTS: Product[] = [
   { id: 'candlenut', cat: 'seeds', name: t8('Candlenut', 'Kemiri', '石栗', 'جوز الشمع', 'Nuez de la India', 'Noix de bancoul', 'Kerzennuss', 'ククイナッツ'), latin: 'Aleurites moluccanus', origin: 'Flores · Sulawesi · Sumatra', forms: ['whole', 'broken'], grade: 'Whole · Half · Broken', moisture: '≤ 7%', hs: '0802.99' },
 ];
 
-// All photos are CC0 / public domain from Wikimedia Commons, so no credit line is needed. Keep it that way, or add credits back.
+// Hero is the client's own facility image; all other photos are CC0 / public domain from Wikimedia Commons, so no credit line is needed. Keep it that way, or add credits back.

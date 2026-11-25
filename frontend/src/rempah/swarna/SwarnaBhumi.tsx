@@ -14,10 +14,10 @@ const waLink = (text: string) => `https://wa.me/${WHATSAPP}?text=${encodeURIComp
 
 const IMG = '/swarnabhumi'; // must not share a name with a page route: nginx would serve the folder (403) instead of the SPA
 const wrap = 'mx-auto w-full max-w-[1200px] px-4 sm:px-6';
-const serif = "font-['Fraunces',ui-serif,Georgia,serif]";
+const display = 'font-jakarta font-extrabold tracking-[-0.02em]'; // modern sans headings (Plus Jakarta Sans, loaded in index.html)
 // Logo colours: brown earth, leaf green, saffron orange.
 const C = { brown: '#4a230d', ink: '#2b1407', green: '#4a9e22', greenText: '#2f7a17', orange: '#f07c19', orangeText: '#b4520b', cream: '#fbf8f2' };
-const h2 = `${serif} mt-3 mb-0 text-[clamp(32px,4.2vw,52px)] leading-[1.08] font-semibold tracking-[-0.01em]`;
+const h2 = `${display} mt-3 mb-0 text-[clamp(30px,4.2vw,50px)] leading-[1.1]`;
 const kicker = 'm-0 inline-flex items-center gap-2 text-[14px] font-bold tracking-[0.14em] uppercase';
 const btn = 'inline-flex min-h-[56px] items-center justify-center gap-2.5 rounded-full px-7 text-[17px] font-bold no-underline transition';
 
@@ -45,7 +45,7 @@ export default function SwarnaBhumi() {
   }, [lang, rtl, t.kicker]);
 
   useEffect(() => {
-    const font = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&display=swap' });
+    const font = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@1,400;1,500&display=swap' });
     const robots = Object.assign(document.createElement('meta'), { name: 'robots', content: 'noindex' }); // preview on Vertinova's domain
     document.head.append(font, robots);
     document.documentElement.style.scrollBehavior = 'smooth';
@@ -86,14 +86,14 @@ export default function SwarnaBhumi() {
 
         {/* Hero */}
         <section id="top" className="relative overflow-hidden pt-[76px] text-white" style={{ background: C.ink }}>
-          <img src={`${IMG}/hero.webp`} alt="" width={1600} height={900} fetchPriority="high" className="absolute inset-0 size-full object-cover" />
+          <img src={`${IMG}/hero.webp`} alt="" width={1672} height={941} fetchPriority="high" className="absolute inset-0 size-full object-cover" />
           <div className="absolute inset-0 bg-[linear-gradient(100deg,rgba(43,20,7,0.94)_0%,rgba(43,20,7,0.75)_45%,rgba(43,20,7,0.25)_100%)] rtl:bg-[linear-gradient(260deg,rgba(43,20,7,0.94)_0%,rgba(43,20,7,0.75)_45%,rgba(43,20,7,0.25)_100%)]" />
           <div className={`${wrap} relative pt-12 pb-32 sm:pt-24 sm:pb-44`}>
             <div>
               <span className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[14px] font-bold tracking-[0.08em] uppercase" style={{ background: C.orange, color: C.ink }}>
                 <Leaf size={16} /> {t.kicker}
               </span>
-              <h1 className={`${serif} mt-6 mb-0 max-w-[820px] text-[clamp(34px,6.2vw,80px)] leading-[1.04] font-semibold tracking-[-0.015em]`}>{t.title}</h1>
+              <h1 className={`${display} mt-6 mb-0 max-w-[860px] text-[clamp(34px,6vw,76px)] leading-[1.06] tracking-[-0.025em] [word-spacing:0.06em]`}>{t.title}</h1>
               <p className="mt-6 mb-0 max-w-[620px] text-[19px] leading-relaxed text-white/90 sm:text-[21px]">{t.lead}</p>
             </div>
           </div>
@@ -105,7 +105,7 @@ export default function SwarnaBhumi() {
             <dl className="m-0 grid grid-cols-2 overflow-hidden rounded-3xl bg-white shadow-[0_30px_60px_-30px_rgba(43,20,7,0.45)] lg:grid-cols-4">
               {t.facts.map((label, i) => (
                 <div key={label} className="border-black/10 p-6 sm:p-8 [&:nth-child(-n+2)]:max-lg:border-b [&:nth-child(odd)]:max-lg:border-e lg:[&:not(:last-child)]:border-e">
-                  <dt className={`${serif} text-[clamp(24px,3.4vw,44px)] leading-none font-bold whitespace-nowrap`} style={{ color: i % 2 ? C.greenText : C.orangeText }}>
+                  <dt className={`${display} text-[clamp(24px,3.4vw,42px)] leading-none whitespace-nowrap`} style={{ color: i % 2 ? C.greenText : C.orangeText }}>
                     {FACT_VALUES[i]}
                   </dt>
                   <dd className="m-0 mt-3 text-[16px] font-semibold text-black/75">{label}</dd>
@@ -121,7 +121,7 @@ export default function SwarnaBhumi() {
             {[0, 1].map((k) => (
               <div key={k} className="flex shrink-0 gap-10">
                 {PRODUCTS.map((p) => (
-                  <span key={p.id} className={`${serif} flex items-center gap-10 text-[24px] font-medium whitespace-nowrap`}>
+                  <span key={p.id} className="flex items-center gap-10 text-[22px] font-bold tracking-[-0.01em] whitespace-nowrap">
                     {p.name[lang]} <span style={{ color: C.orange }}>✦</span>
                   </span>
                 ))}
@@ -137,7 +137,7 @@ export default function SwarnaBhumi() {
             <div className="absolute -bottom-6 end-4 flex items-center gap-3 rounded-2xl bg-white px-5 py-4 shadow-[0_20px_40px_-20px_rgba(43,20,7,0.5)] sm:end-8">
               <MapPin size={26} style={{ color: C.greenText }} />
               <span>
-                <strong className={`${serif} block text-[26px] leading-none`}>{FACT_VALUES[1]}</strong>
+                <strong className={`${display} block text-[26px] leading-none`}>{FACT_VALUES[1]}</strong>
                 <span className="text-[15px] font-semibold text-black/70">{t.facts[1]}</span>
               </span>
             </div>
@@ -209,8 +209,8 @@ export default function SwarnaBhumi() {
                     </span>
                   </div>
                   <div className="flex flex-1 flex-col p-5 sm:p-6">
-                    <h3 className={`${serif} m-0 text-[26px] leading-tight font-semibold`}>{p.name[lang]}</h3>
-                    <p className={`${serif} mt-1 mb-0 text-[16px] text-black/65 italic`}>
+                    <h3 className={`${display} m-0 text-[24px] leading-tight tracking-[-0.02em]`}>{p.name[lang]}</h3>
+                    <p className="mt-1 mb-0 text-[15px] font-medium text-black/60 italic">
                       <bdi>{p.latin}</bdi>
                     </p>
                     <dl className="mt-5 mb-0 grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 border-t border-black/10 pt-5 text-[15px]">
@@ -261,7 +261,7 @@ export default function SwarnaBhumi() {
                     className="h-full rounded-3xl border border-white/10 bg-white/[0.05] p-5 sm:p-7"
                   >
                       <div className="flex items-center justify-between">
-                        <span className={`${serif} text-[38px] leading-none font-bold sm:text-[48px]`} style={{ color: C.orange }}>
+                        <span className={`${display} text-[38px] leading-none sm:text-[48px]`} style={{ color: C.orange }}>
                           0{i + 1}
                         </span>
                         <Icon size={30} className="text-[#7cc957]" />
@@ -498,7 +498,7 @@ function Logo() {
         </g>
       </svg>
       <span className="leading-none">
-        <span className={`${serif} block text-[18px] font-bold tracking-[0.04em] sm:text-[21px]`} style={{ color: C.brown }}>
+        <span className="block font-['Georgia',ui-serif,serif] text-[18px] font-bold tracking-[0.04em] sm:text-[21px]" style={{ color: C.brown }}>
           SWARNABHUMI
         </span>
         <span className="mt-1 block text-[11px] font-semibold tracking-[0.12em] sm:text-[13px]" style={{ color: C.greenText }}>
