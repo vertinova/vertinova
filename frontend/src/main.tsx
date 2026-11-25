@@ -5,7 +5,7 @@ import './styles.css';
 
 // Extra pages (client demos/proposals) live on their own paths and are only downloaded when visited.
 const PAGES: Record<string, React.LazyExoticComponent<() => React.JSX.Element>> = {
-  '/rempah': lazy(() => import('./rempah/demo/RempahDemo')),
+  '/rempah': lazy(() => import('./rempah/swarna/SwarnaBhumi')),
   '/rempah/usulan': lazy(() => import('./rempah/RempahPage')),
 };
 const Page = PAGES[window.location.pathname.replace(/\/+$/, '')];
