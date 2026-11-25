@@ -39,7 +39,6 @@ export type Copy = {
   waHello: string;
   office: string;
   footerTag: string;
-  credits: string;
   language: string;
 };
 
@@ -87,7 +86,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'Hello PT Swarnabhumi Global Nusantara, I would like to ask about your spices.',
     office: 'Head office',
     footerTag: 'Indonesian spices for the world.',
-    credits: 'Photo credits',
     language: 'Language',
   },
   id: {
@@ -130,7 +128,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'Halo PT Swarnabhumi Global Nusantara, saya ingin bertanya tentang produk rempah Anda.',
     office: 'Kantor pusat',
     footerTag: 'Rempah Indonesia untuk dunia.',
-    credits: 'Kredit foto',
     language: 'Bahasa',
   },
   zh: {
@@ -173,7 +170,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: '您好 PT Swarnabhumi Global Nusantara，我想咨询贵公司的香料产品。',
     office: '总部',
     footerTag: '印度尼西亚香料，供应全球。',
-    credits: '图片来源',
     language: '语言',
   },
   ar: {
@@ -216,7 +212,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'مرحبًا PT Swarnabhumi Global Nusantara، أود الاستفسار عن منتجاتكم من التوابل.',
     office: 'المقر الرئيسي',
     footerTag: 'توابل إندونيسية للعالم.',
-    credits: 'مصادر الصور',
     language: 'اللغة',
   },
   es: {
@@ -259,7 +254,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'Hola PT Swarnabhumi Global Nusantara, quisiera información sobre sus especias.',
     office: 'Sede',
     footerTag: 'Especias de Indonesia para el mundo.',
-    credits: 'Créditos de fotos',
     language: 'Idioma',
   },
   fr: {
@@ -302,7 +296,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'Bonjour PT Swarnabhumi Global Nusantara, je souhaite me renseigner sur vos épices.',
     office: 'Siège',
     footerTag: 'Des épices indonésiennes pour le monde.',
-    credits: 'Crédits photos',
     language: 'Langue',
   },
   de: {
@@ -345,7 +338,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'Hallo PT Swarnabhumi Global Nusantara, ich möchte mich über Ihre Gewürze informieren.',
     office: 'Hauptsitz',
     footerTag: 'Indonesische Gewürze für die Welt.',
-    credits: 'Bildnachweise',
     language: 'Sprache',
   },
   ja: {
@@ -388,7 +380,6 @@ export const COPY: Record<Lang, Copy> = {
     waHello: 'PT Swarnabhumi Global Nusantara 様、スパイス製品について問い合わせたいです。',
     office: '本社',
     footerTag: 'インドネシアのスパイスを世界へ。',
-    credits: '写真クレジット',
     language: '言語',
   },
 };
@@ -435,20 +426,4 @@ export const PRODUCTS: Product[] = [
   { id: 'candlenut', cat: 'seeds', name: t8('Candlenut', 'Kemiri', '石栗', 'جوز الشمع', 'Nuez de la India', 'Noix de bancoul', 'Kerzennuss', 'ククイナッツ'), latin: 'Aleurites moluccanus', origin: 'Flores · Sulawesi · Sumatra', forms: ['whole', 'broken'], grade: 'Whole · Half · Broken', moisture: '≤ 7%', hs: '0802.99' },
 ];
 
-// Wikimedia Commons photos; CC BY / BY-SA require this attribution to stay on the page.
-export const CREDITS = [
-  { photo: 'cloves', author: 'Fumikas Sagisavas', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Dried_clove_sticks.jpg' },
-  { photo: 'nutmeg', author: 'Sajith Erattupetta', license: 'CC BY 4.0', url: 'https://commons.wikimedia.org/wiki/File:Nutmeg_seed_and_skin.JPG' },
-  { photo: 'mace', author: 'Miansari66', license: 'Public domain', url: 'https://commons.wikimedia.org/wiki/File:Mace_1.JPG' },
-  { photo: 'black-pepper', author: 'Misterneedlemouse', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Tellicherry_Black_Peppercorns.jpg' },
-  { photo: 'white-pepper', author: 'Misterneedlemouse', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:White_Peppercorns.jpg' },
-  { photo: 'cassia', author: 'Fumikas Sagisavas', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Cinnamon_sticks_(1).jpg' },
-  { photo: 'vanilla', author: 'Mvsoa', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:La_vanille_de_Madagasikara_02.jpg' },
-  { photo: 'ginger', author: 'Judethedeus', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Ginger_rhizomes.jpg' },
-  { photo: 'turmeric', author: 'MattPicks', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Organic_Turmeric_Rhizome_(Root).jpg' },
-  { photo: 'galangal', author: 'Ruth Hartnup', license: 'CC BY 2.0', url: 'https://commons.wikimedia.org/wiki/File:Galangal_(562251733).jpg' },
-  { photo: 'cardamom', author: 'Misterneedlemouse', license: 'CC0', url: 'https://commons.wikimedia.org/wiki/File:Green_Cardamom_Pods.jpg' },
-  { photo: 'candlenut', author: 'Andri Kesenja 01', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Kemiri_atau_damo.jpg' },
-  { photo: 'hero', author: 'Desatambahrejo', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Drying_cengkih.jpg' },
-  { photo: 'about', author: 'Christine Anggeline', license: 'CC BY-SA 4.0', url: 'https://commons.wikimedia.org/wiki/File:Common_Spices_in_Bali,_Indonesia.jpg' },
-];
+// All photos are CC0 / public domain from Wikimedia Commons, so no credit line is needed. Keep it that way, or add credits back.

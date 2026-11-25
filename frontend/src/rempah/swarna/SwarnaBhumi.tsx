@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, MotionConfig } from 'framer-motion';
 import { Check, ChevronDown, ClipboardCheck, FileText, Globe2, Leaf, Mail, MapPin, Package, Ship, Sprout } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { CATEGORIES, COPY, CREDITS, DOCS, FACT_VALUES, FORMS, LANG_NAMES, PRODUCTS, type Category } from './content';
+import { CATEGORIES, COPY, DOCS, FACT_VALUES, FORMS, LANG_NAMES, PRODUCTS, type Category } from './content';
 import { countryLang, initialLang, LANGS, saveLang, type Lang } from './lang';
 
 // Company profile for PT Swarnabhumi Global Nusantara (spice commodities), previewed at vertinova.id/rempah.
@@ -346,19 +346,6 @@ export default function SwarnaBhumi() {
             <span>
               © {new Date().getFullYear()} {NAME}
             </span>
-            <details>
-              <summary className="cursor-pointer">{t.credits}</summary>
-              <ul className="mt-2 mb-0 list-none p-0" dir="ltr">
-                {CREDITS.map((c) => (
-                  <li key={c.photo}>
-                    <a href={c.url} target="_blank" rel="noreferrer" className="text-inherit">
-                      {c.photo}
-                    </a>
-                    : {c.author}, {c.license}, via Wikimedia Commons
-                  </li>
-                ))}
-              </ul>
-            </details>
           </div>
         </footer>
 
